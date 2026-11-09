@@ -99,17 +99,59 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   `ignoreDeprecations` solo calla el aviso, no lo resuelve; la solución real a
   `baseUrl` es migrar antes de TS 7.
 
-## Bug 1 — Dependencias instaladas en la carpeta padre ⏳
+## Bug 1 — Dependencias instaladas en la carpeta padre ✅
 
 - **Hipótesis:** `../package.json`, `../node_modules` y `../package-lock.json`
   (en `copiloto-ecommerce/`) vienen de un `npm install` hecho en la carpeta
   equivocada. Ahí están `lucide-react` y `resend`. `resend` arrastra
   `standardwebhooks` (CommonJS), que causó `ReferenceError: exports is not defined`.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:**
+  - Confirmado: los tres se crearon el 2026-11-08 a las 20:29 (un solo `npm install`).
+    Contenido del `../package.json` borrado, como respaldo:
+    `{"dependencies": {"lucide-react": "^1.70.0", "resend": "^6.37.0"}}`.
+  - Confirmado: `standardwebhooks@1.1.1` tiene `"type": "commonjs"` y su código
+    empieza con `exports.Webhook = ...`. Es dependencia directa de `resend@6.37.0`.
+  - Confirmado: `npm ls` en `hydrogen-front` sale `(empty)` y no hay imports de `resend`.
+  - **Falso:** `lucide-react` no se usa en ninguna parte del repo (0 coincidencias
+    de `lucide`). No se instala aquí.
+  - Script de dependencias fantasma (scratchpad): los 26 paquetes que importa el
+    código están todos declarados en el `package.json` de `hydrogen-front`.
+  - Hallazgo extra: en el padre había un **React 19.3.1**, que npm instaló porque
+    es *peer dependency* de `lucide-react`. La tienda usa React 18.3.1.
+- **Causa raíz:** se corrió `npm install` en `copiloto-ecommerce/` en vez de
+  `hydrogen-front/`. Al no haber `package.json`, npm creó uno sin `name` ni
+  `version`. Funcionaba porque Node y Vite resuelven los imports **subiendo
+  carpetas**: si no está en `hydrogen-front/node_modules`, lo buscan en
+  `../node_modules`. El crash venía de que MiniOxygen ejecuta el servidor en
+  workerd, que solo entiende ES Modules y no tiene `exports`. En dev, Vite no
+  convierte paquetes CommonJS salvo que estén en `ssr.optimizeDeps.include`
+  (ver el comentario en `vite.config.ts:24-38`). No se pudo reproducir porque el
+  import ya no existe; la conclusión sale de leer el código.
+- **Por qué habría roto el deploy en Oxygen:** (1) el repo es `hydrogen-front`,
+  así que un deploy desde GitHub clona solo esa carpeta y corre `npm ci` con su
+  `package.json`: `resend` no existe y el build falla con "Could not resolve".
+  (2) El lock de esas versiones estaba fuera del repo, así que no se pueden
+  reproducir. (3) Si se hubiera usado `lucide-react`, habría cargado el React 19
+  del padre junto al React 18 de la app, y con dos Reacts los hooks fallan.
+- **Fix:** borrar (con permiso de Sebas) `../node_modules`, `../package.json` y
+  `../package-lock.json`. Dentro de `hydrogen-front` no cambia código: este
+  commit solo trae la bitácora.
+- **Cómo verificar:**
+  - `require.resolve` de `lucide-react`, `resend` y `standardwebhooks` desde
+    `hydrogen-front` da `MODULE_NOT_FOUND`.
+  - Dependencias fantasma: 0.
+  - Typecheck: los mismos 3 errores de la línea base (0 nuevos).
+  - `npx shopify hydrogen build` (sin `--codegen`): exit 0, 148 módulos del
+    servidor, sin "Could not resolve"; `git status` limpio.
+  - Navegador: home, PDP y carrito lateral cargan, y en la consola no aparece
+    "Failed to resolve import" ni "exports is not defined".
+- **Pregunta de entrevista:** *"Tu app funciona en local, pero el build del CI
+  falla con `Could not resolve 'resend'`, aunque en tu máquina el paquete está
+  instalado. ¿Qué pasa y cómo lo detectas antes del deploy?"* Puntos clave:
+  resolución de módulos subiendo carpetas; dependencia fantasma (se usa pero no
+  está declarada); el CI solo tiene lo que está en el repo; cómo detectarlo:
+  `npm ls`, un clon limpio con `npm ci` + build, o linters de imports no
+  declarados.
 
 ## Bug 2 — "Error al enviar" en el formulario ⏳
 
@@ -224,6 +266,11 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   TS 6.0.3 y el proyecto usa 5.9.3. Por eso VS Code muestra el aviso de
   `baseUrl` en `tsconfig.json`. Pendiente que Sebas decida cómo alinear el
   editor con el proyecto.
+- **Avisos del build (viene del Bug 1):** `[plugin hydrogen:bundle-analyzer]
+  Error: This plugin assigns to bundle variable... not supported by Rolldown`
+  y "Could not generate bundle analysis summary". Son del plugin de análisis del
+  Shopify CLI con Vite 8/Rolldown: el build termina bien (exit 0). No es de
+  nuestro código.
 
 ### Decisiones tomadas en el Paso 0
 
