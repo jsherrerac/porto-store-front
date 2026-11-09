@@ -338,15 +338,46 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   `return` temprano corta todo lo que viene después, así que conviene un efecto
   por responsabilidad.
 
-## Bug 6 ✍️ — `@studio-freight/lenis` deprecado ⏳
+## Bug 6 ✍️ — `@studio-freight/lenis` deprecado ✅
 
 - **Hipótesis:** el paquete ahora se llama `lenis`. Hay que migrar sin cambiar
   el comportamiento.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix (lo escribe Sebas):** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:**
+  - `package.json` tenía `@studio-freight/lenis@^1.0.42`, la última versión que
+    ese paquete publicó. Solo un archivo lo importaba (`grep -rln
+    "studio-freight" app/` → únicamente `_index.tsx:7`).
+  - Los mismos autores (darkroom.engineering) republicaron Lenis sin el scope,
+    como el paquete `lenis`, activamente mantenido (`npm view lenis version` →
+    `1.3.27`).
+  - Se descargó el paquete nuevo (`npm pack lenis`) y se comparó su API contra
+    el código: mismo export default, mismo constructor, y las 3 opciones en
+    uso (`duration`, `easing`, `smoothWheel`) siguen existiendo con el mismo
+    nombre y el mismo valor por default. Reemplazo 1 a 1, sin cambios de
+    comportamiento.
+- **Causa raíz:** deuda técnica — el proyecto dependía de un paquete
+  abandonado cuando existe el mismo paquete, del mismo autor, mantenido bajo
+  otro nombre.
+- **Fix (lo escribió Sebas):**
+  - `npm uninstall @studio-freight/lenis && npm install lenis`.
+  - En `_index.tsx:7`: `import Lenis from 'lenis';` en vez de
+    `from '@studio-freight/lenis'`.
+  - En el primer intento, el `npm install lenis` no llegó a correr (quedó sin
+    rastro en `package.json`, `package-lock.json` y `node_modules`): Claude lo
+    detectó comparando los tres contra lo que debía verse, y Sebas lo volvió a
+    correr.
+- **Cómo verificar:** scroll de la home debe sentirse exactamente igual que
+  antes (mismo "smooth scroll"), sin errores nuevos en consola.
+  `npx tsc --noEmit` → 0 errores. ESLint sobre `_index.tsx` → mismos 6
+  problemas de la línea base, ninguno nuevo.
+- **Pregunta de entrevista:** ¿por qué se pudo cambiar de paquete sin tocar
+  ninguna otra línea del código de scroll? ¿Qué hay que revisar siempre antes
+  de aceptar un cambio de dependencia así en un proyecto real?
+
+> Nota: quedó una carpeta huérfana `node_modules/@studio-freight/` en disco
+> (el `npm uninstall` no la borró, probablemente porque el dev server tenía
+> algún archivo abierto). No está en git (`node_modules` está en
+> `.gitignore`) y no afecta nada; se puede borrar a mano o se limpia sola en
+> la próxima instalación limpia.
 
 ## Bug 7 — Lenis movido por dos relojes ⏳
 
