@@ -228,6 +228,7 @@ export default function Homepage() {
     <div style={{ backgroundColor: '#2E3532', color: '#E0E2DB', minHeight: '100vh', overflowX: 'hidden', fontFamily: '"Inter", sans-serif', cursor: 'none' }}>
       <style>{`
         * { cursor: none !important; }
+        body main { margin: 0; }
         
         /* ADIÓS AL EFECTO DE HUNDIRSE: Solo dejamos una transición sutil de brillo o borde limpio */
         .product-card { transition: border-color 0.4s ease, box-shadow 0.4s ease; }
@@ -255,7 +256,7 @@ export default function Homepage() {
       </div>
 
       {/* SECCIÓN 1: HERO */}
-      <section style={{ height: '100vh', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', overflow: 'hidden' }}>
+      <section style={{ height: '100vh', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', overflow: 'hidden', isolation: 'isolate' }}>
         <div ref={heroBgRef} style={{ position: 'absolute', top: '-10%', left: 0, width: '100%', height: '120%', backgroundImage: 'url("/hero-bg.jpg")', backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0 }} />
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(28, 33, 31, 0.7)', zIndex: 1 }} />
         <div style={{ zIndex: 2 }}>
@@ -265,7 +266,7 @@ export default function Homepage() {
       </section>
 
       {/* SECCIÓN 2: CANVAS 3D */}
-      <section ref={canvasContainerRef} style={{ height: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212', overflow: 'hidden', position: 'relative' }}>
+      <section ref={canvasContainerRef} style={{ height: '100vh', width: '100vw', display: 'flex', justifyContent: 'center', alignItems: 'center', backgroundColor: '#121212', overflow: 'hidden', position: 'relative', isolation: 'isolate' }}>
         <canvas ref={canvasRef} style={{ width: '100vw', height: '100vh', objectFit: 'contain', maxWidth: '70vw', maxHeight: '70vh', zIndex: 1 }} />
         <div className="callout-1" style={{ position: 'absolute', top: '40%', left: '12%', zIndex: 2, display: 'flex', alignItems: 'center' }}>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
@@ -318,7 +319,7 @@ export default function Homepage() {
       </section>
 
       {/* SECCIÓN 5: PILARES */}
-      <section ref={pillarsSectionRef} style={{ height: '100vh', width: '100vw', backgroundColor: '#1C211F', display: 'flex', alignItems: 'flex-end', padding: '0 2vw', overflow: 'hidden' }}>
+      <section ref={pillarsSectionRef} style={{ height: '100vh', width: '100vw', backgroundColor: '#1C211F', display: 'flex', alignItems: 'flex-end', padding: '0 2vw', overflow: 'hidden', isolation: 'isolate' }}>
         <div style={{ display: 'flex', height: '85vh', width: '100%', gap: '1.5vw', alignItems: 'flex-end' }}>
           <div ref={pillar1Ref} style={{ flex: 1, height: '100%', background: 'linear-gradient(180deg, #2E3532 0%, #1C211F 100%)', borderRadius: '16px 16px 0 0', display: 'flex', flexDirection: 'column', padding: '4rem 3rem', borderTop: '6px solid #8B2635', position: 'relative', overflow: 'hidden' }}>
             <span style={{ position: 'absolute', top: '-1rem', right: '1rem', fontSize: '10rem', fontWeight: 800, color: 'rgba(224, 226, 219, 0.04)', lineHeight: 1 }}>01</span>
