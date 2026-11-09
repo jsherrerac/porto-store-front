@@ -328,8 +328,8 @@ export default function Homepage() {
           </div>
           <div ref={pillar2Ref} style={{ flex: 1, height: '60%', background: 'linear-gradient(180deg, #2E3532 0%, #1C211F 100%)', borderRadius: '16px 16px 0 0', display: 'flex', flexDirection: 'column', padding: '4rem 3rem', borderTop: '6px solid #8B2635', position: 'relative', overflow: 'hidden' }}>
             <span style={{ position: 'absolute', top: '-1rem', right: '1rem', fontSize: '10rem', fontWeight: 800, color: 'rgba(224, 226, 219, 0.04)', lineHeight: 1 }}>02</span>
-            <h3 style={{ fontSize: '2.5rem', margin: '0 0 1.5rem 0', fontFamily: '"Playfair Display", serif', color: '#E0E2DB', zIndex: 1 }}>"Simplemente perfecto"</h3>
-            <p style={{ color: '#D2D4C8', fontSize: '1.2rem', fontStyle: 'italic', zIndex: 1 }}>— Reseña verificada de cliente en Bogotá.</p>
+            <h3 style={{ fontSize: '2.5rem', margin: '0 0 1.5rem 0', fontFamily: '"Playfair Display", serif', color: '#E0E2DB', zIndex: 1 }}>Opiniones de clientes</h3>
+            <p style={{ color: '#D2D4C8', fontSize: '1.2rem', fontStyle: 'italic', zIndex: 1 }}>Próximamente publicaremos reseñas de compradores reales.</p>
           </div>
           <div ref={pillar3Ref} style={{ flex: 1, height: '45%', background: 'linear-gradient(180deg, #2E3532 0%, #1C211F 100%)', borderRadius: '16px 16px 0 0', display: 'flex', flexDirection: 'column', padding: '4rem 3rem', borderTop: '6px solid #8B2635', position: 'relative', overflow: 'hidden' }}>
             <span style={{ position: 'absolute', top: '-1rem', right: '1rem', fontSize: '10rem', fontWeight: 800, color: 'rgba(224, 226, 219, 0.04)', lineHeight: 1 }}>03</span>
