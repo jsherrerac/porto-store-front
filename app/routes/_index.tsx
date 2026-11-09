@@ -71,12 +71,13 @@ export default function Homepage() {
     
 
     let currentProgress = 0;
+    let preloaderTween: gsap.core.Tween | undefined;
     const interval = setInterval(() => {
       currentProgress += Math.floor(Math.random() * 15) + 10;
       if (currentProgress >= 100) {
         clearInterval(interval);
         setProgress(100);
-        gsap.to(preloaderRef.current, {
+        preloaderTween = gsap.to(preloaderRef.current, {
           y: '-100%', duration: 1.2, ease: 'expo.inOut',
           onComplete: () => {
             setLoading(false);
@@ -91,7 +92,11 @@ export default function Homepage() {
       }
     }, 150);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      preloaderTween?.kill();
+      document.body.style.overflow = 'auto';
+    };
   }, []);
 
   // 2. Animaciones Scroll
@@ -104,79 +109,93 @@ export default function Homepage() {
     gsap.ticker.add(lenisRaf);
     gsap.ticker.lagSmoothing(0);
 
-    if (heroBgRef.current) gsap.to(heroBgRef.current, { y: '20%', ease: 'none', scrollTrigger: { trigger: heroBgRef.current, start: 'top top', end: 'bottom top', scrub: true } });
+    const ctx = gsap.context(() => {
+      if (heroBgRef.current) gsap.to(heroBgRef.current, { y: '20%', ease: 'none', scrollTrigger: { trigger: heroBgRef.current, start: 'top top', end: 'bottom top', scrub: true } });
 
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const context = canvas.getContext('2d');
-      canvas.width = 1000; canvas.height = 1000;
-      const frameCount = 160; 
-      const currentFrame = (index: number) => `/frames/ezgif-frame-${(index + 1).toString().padStart(3, '0')}.png`;
-      const images: HTMLImageElement[] = [];
-      const shoe3D = { frame: 0 };
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const context = canvas.getContext('2d');
+        canvas.width = 1000; canvas.height = 1000;
+        const frameCount = 160;
+        const currentFrame = (index: number) => `/frames/ezgif-frame-${(index + 1).toString().padStart(3, '0')}.png`;
+        const images: HTMLImageElement[] = [];
+        const shoe3D = { frame: 0 };
 
-      for (let i = 0; i < frameCount; i++) {
-        const img = new window.Image(); 
-        img.src = currentFrame(i);
-        images.push(img);
-      }
-
-      function render() {
-        if (!context || !canvas || !images[shoe3D.frame]) return;
-        const img = images[shoe3D.frame];
-        if (img.complete) {
-          context.clearRect(0, 0, canvas.width, canvas.height);
-          context.drawImage(img, 0, 0, canvas.width, canvas.height);
+        for (let i = 0; i < frameCount; i++) {
+          const img = new window.Image();
+          img.src = currentFrame(i);
+          images.push(img);
         }
-      }
-      images[0].onload = render;
 
-      const tl3D = gsap.timeline({ scrollTrigger: { trigger: canvasContainerRef.current, pin: true, scrub: 1.2, end: '+=3000' } });
-      tl3D.to(shoe3D, { frame: frameCount - 1, snap: 'frame', ease: 'none', onUpdate: render }, 0);
-      tl3D.fromTo('.callout-1', { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.1 }, 0.2).to('.callout-1', { opacity: 0, x: -30, duration: 0.1 }, 0.4);
-      tl3D.fromTo('.callout-2', { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.1 }, 0.5).to('.callout-2', { opacity: 0, x: 30, duration: 0.1 }, 0.7);
-    }
-
-    const carousel = carouselRef.current;
-    const cards = gsap.utils.toArray('.card-tilt-wrapper');
-    if (carousel && cards.length) {
-      const totalScroll = carousel.scrollWidth - window.innerWidth;
-      gsap.to(carousel, {
-        x: -totalScroll, ease: 'none',
-        scrollTrigger: {
-          trigger: containerRef.current, pin: true, scrub: 1.5, end: () => `+=${totalScroll}`, invalidateOnRefresh: true,
-          onUpdate: (self) => {
-            const velocity = self.getVelocity(); 
-            const rotateAmount = gsap.utils.clamp(-4, 4, velocity / 800); 
-            gsap.to(cards, { rotateZ: rotateAmount, ease: 'power1.out', overwrite: 'auto', duration: 0.2 });
-            if (Math.abs(velocity) < 5) gsap.to(cards, { rotateZ: 0, duration: 0.4, ease: 'power2.out', overwrite: 'auto' });
+        function render() {
+          if (!context || !canvas || !images[shoe3D.frame]) return;
+          const img = images[shoe3D.frame];
+          if (img.complete) {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(img, 0, 0, canvas.width, canvas.height);
           }
-        },
-      });
-    }
+        }
+        images[0].onload = render;
 
-    if (textSectionRef.current && wordsRef.current.length > 0) {
-      gsap.fromTo(wordsRef.current, { opacity: 0, y: 50, rotateX: -45 }, { opacity: 1, y: 0, rotateX: 0, duration: 1, stagger: 0.1, ease: 'power3.out', scrollTrigger: { trigger: textSectionRef.current, start: 'top 60%', end: '+=800', scrub: 1 } });
-    }
+        const tl3D = gsap.timeline({ scrollTrigger: { trigger: canvasContainerRef.current, pin: true, scrub: 1.2, end: '+=3000' } });
+        tl3D.to(shoe3D, { frame: frameCount - 1, snap: 'frame', ease: 'none', onUpdate: render }, 0);
+        tl3D.fromTo('.callout-1', { opacity: 0, x: -30 }, { opacity: 1, x: 0, duration: 0.1 }, 0.2).to('.callout-1', { opacity: 0, x: -30, duration: 0.1 }, 0.4);
+        tl3D.fromTo('.callout-2', { opacity: 0, x: 30 }, { opacity: 1, x: 0, duration: 0.1 }, 0.5).to('.callout-2', { opacity: 0, x: 30, duration: 0.1 }, 0.7);
+      }
 
-    if (pillarsSectionRef.current) {
-      const tlPillars = gsap.timeline({ scrollTrigger: { trigger: pillarsSectionRef.current, pin: true, scrub: 1.5, start: 'top top', end: '+=1500' } });
-      tlPillars.fromTo([pillar1Ref.current, pillar2Ref.current, pillar3Ref.current, pillar4Ref.current], { y: '100vh' }, { y: '0', ease: 'power3.out', stagger: 0.1, duration: 1.5 });
-      tlPillars.to([pillar2Ref.current, pillar3Ref.current, pillar4Ref.current], { height: '100%', ease: 'power2.inOut', stagger: 0.1, duration: 1.5 }, "<0.5");
-    }
+      const carousel = carouselRef.current;
+      const cards = gsap.utils.toArray('.card-tilt-wrapper');
+      if (carousel && cards.length) {
+        const totalScroll = carousel.scrollWidth - window.innerWidth;
+        gsap.to(carousel, {
+          x: -totalScroll, ease: 'none',
+          scrollTrigger: {
+            trigger: containerRef.current, pin: true, scrub: 1.5, end: () => `+=${totalScroll}`, invalidateOnRefresh: true,
+            onUpdate: (self) => {
+              const velocity = self.getVelocity();
+              const rotateAmount = gsap.utils.clamp(-4, 4, velocity / 800);
+              gsap.to(cards, { rotateZ: rotateAmount, ease: 'power1.out', overwrite: 'auto', duration: 0.2 });
+              if (Math.abs(velocity) < 5) gsap.to(cards, { rotateZ: 0, duration: 0.4, ease: 'power2.out', overwrite: 'auto' });
+            }
+          },
+        });
+      }
+
+      if (textSectionRef.current && wordsRef.current.length > 0) {
+        gsap.fromTo(wordsRef.current, { opacity: 0, y: 50, rotateX: -45 }, { opacity: 1, y: 0, rotateX: 0, duration: 1, stagger: 0.1, ease: 'power3.out', scrollTrigger: { trigger: textSectionRef.current, start: 'top 60%', end: '+=800', scrub: 1 } });
+      }
+
+      if (pillarsSectionRef.current) {
+        const tlPillars = gsap.timeline({ scrollTrigger: { trigger: pillarsSectionRef.current, pin: true, scrub: 1.5, start: 'top top', end: '+=1500' } });
+        tlPillars.fromTo([pillar1Ref.current, pillar2Ref.current, pillar3Ref.current, pillar4Ref.current], { y: '100vh' }, { y: '0', ease: 'power3.out', stagger: 0.1, duration: 1.5 });
+        tlPillars.to([pillar2Ref.current, pillar3Ref.current, pillar4Ref.current], { height: '100%', ease: 'power2.inOut', stagger: 0.1, duration: 1.5 }, "<0.5");
+      }
+    });
 
     const magneticBtn = magneticButtonRef.current;
+    let cleanupMagnetic = () => {};
     if (magneticBtn) {
-      magneticBtn.addEventListener('mousemove', (e) => {
+      const handleMagneticMove = (e: MouseEvent) => {
         const rect = magneticBtn.getBoundingClientRect();
         const x = (e.clientX - rect.left - rect.width / 2) * 0.4;
         const y = (e.clientY - rect.top - rect.height / 2) * 0.4;
         gsap.to(magneticBtn, { x, y, duration: 0.3, ease: 'power3.out' });
-      });
-      magneticBtn.addEventListener('mouseleave', () => gsap.to(magneticBtn, { x: 0, y: 0, duration: 0.7, ease: 'elastic.out(1, 0.3)' }));
+      };
+      const handleMagneticLeave = () => { gsap.to(magneticBtn, { x: 0, y: 0, duration: 0.7, ease: 'elastic.out(1, 0.3)' }); };
+      magneticBtn.addEventListener('mousemove', handleMagneticMove);
+      magneticBtn.addEventListener('mouseleave', handleMagneticLeave);
+      cleanupMagnetic = () => {
+        magneticBtn.removeEventListener('mousemove', handleMagneticMove);
+        magneticBtn.removeEventListener('mouseleave', handleMagneticLeave);
+      };
     }
 
-    return () => { gsap.ticker.remove(lenisRaf); lenis.destroy(); ScrollTrigger.getAll().forEach((trigger) => trigger.kill()); };
+    return () => {
+      gsap.ticker.remove(lenisRaf);
+      lenis.destroy();
+      ctx.revert();
+      cleanupMagnetic();
+    };
   }, [loading]);
 
   // Función para manejar el envío de correo desde el formulario del footer
