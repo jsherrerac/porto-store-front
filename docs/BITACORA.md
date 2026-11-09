@@ -45,16 +45,59 @@ future flags de React Router v8 (`v8_passThroughRequests`,
 
 ---
 
-## Bug 0 — `tsconfig.json` inválido tapa el typecheck ⏳
+## Bug 0 — `tsconfig.json` inválido tapa el typecheck ✅
 
 - **Hipótesis:** `"ignoreDeprecations": "6.0"` (línea 27) no es válido en el
   TypeScript 5.9.3 del proyecto (TS5103), y eso impide que `tsc` revise los tipos.
   Además hay que agregar `tsconfig.tsbuildinfo` al `.gitignore`.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:**
+  - `git log -p -- tsconfig.json`: `baseUrl` viene del template (`ee0d4a1 Scaffold Storefront`).
+    `ignoreDeprecations` no aparece en ningún commit tuyo: entró sin commitear,
+    entre `a436cf6` y el commit base.
+  - Dos TypeScript distintos: el proyecto usa **5.9.3** (`node_modules`, lo corre
+    `npm run typecheck`), y VS Code trae **6.0.3** integrado (no hay
+    `typescript.tsdk` ni `.vscode/`).
+  - Probé los dos compiladores con el tsconfig modificado solo en memoria
+    (script en el scratchpad, fuera del repo):
+
+    | tsconfig | TS 5.9.3 (proyecto) | TS 6.0.3 (VS Code) |
+    |---|---|---|
+    | A) con línea 27 | ❌ TS5103, tapa 3 errores | ✅ 0 en tsconfig |
+    | B) sin línea 27 | ✅ 0 en tsconfig, muestra 3 errores | ❌ TS5101 `baseUrl` deprecado |
+    | C) sin línea 27 ni `baseUrl` | ❌ TS5090 + 53 errores | ❌ TS5090 + 53 errores |
+
+  - Al guardar el fix, VS Code marcó en `tsconfig.json:27`: *"La opción 'baseUrl'
+    está en desuso [...] Especifique 'ignoreDeprecations': '6.0' para silenciar
+    este error"*. Eso confirma que el editor usa TS 6.
+- **Causa raíz:** el editor y el proyecto usan TypeScript distintos. TS 6 declara
+  `baseUrl` obsoleto y lo marca como error, y el propio mensaje sugiere
+  `"ignoreDeprecations": "6.0"`. Alguien siguió esa sugerencia para callar al
+  editor, pero TS 5.9 no conoce el valor `"6.0"`, y cuando `tsc` encuentra un
+  error en las opciones **no revisa los tipos**. Por eso el typecheck mostraba
+  1 error en vez de 3. Quitar `baseUrl` no sirve (escenario C): 22 archivos
+  importan `'storefrontapi.generated'` / `'customer-accountapi.generated'` por
+  nombre y esos imports solo resuelven gracias a `baseUrl`.
+- **Fix:** borrar la línea 27 de `tsconfig.json` (queda idéntico al template,
+  blob `54587bd`). Agregar `tsconfig.tsbuildinfo` al `.gitignore` (y el salto de
+  línea final que le faltaba).
+- **Cómo verificar:** `npm run typecheck` ya no muestra TS5103 y lista los 3
+  errores de abajo (los mismos que estaban ocultos: 0 nuevos). `git status` ya
+  no muestra `tsconfig.tsbuildinfo`. En el navegador no cambia nada: Vite no
+  hace typecheck. En VS Code el aviso de `baseUrl` es esperado mientras el editor
+  use TS 6 (ver "Anotado").
+- **Línea base real desde aquí (3 errores, se resuelven en el Bug 4):**
+  ```
+  app/components/ProductForm.tsx(9,14): error TS2724: ... no exported member named 'ProductFragment'
+  app/components/ProductImage.tsx(1,14): error TS2724: ... no exported member named 'ProductVariantFragment'
+  app/components/ProductItem.tsx(6,3): error TS2305: ... no exported member 'RecommendedProductFragment'
+  ```
+- **Pregunta de entrevista:** *"Tu `npm run typecheck` marca un error en el
+  tsconfig y VS Code marca otro distinto en el mismo archivo. ¿Qué pasa y cómo lo
+  arreglas sin silenciar nada?"* Puntos clave: el editor trae su propio
+  TypeScript y la fuente de verdad es la versión del `package.json`; un error en
+  las opciones hace que `tsc` no revise los tipos (puede esconder errores);
+  `ignoreDeprecations` solo calla el aviso, no lo resuelve; la solución real a
+  `baseUrl` es migrar antes de TS 7.
 
 ## Bug 1 — Dependencias instaladas en la carpeta padre ⏳
 
@@ -174,6 +217,13 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   Se van a reemplazar por frames propios.
 - **Peso de `public/frames`:** 17 MB en 160 PNG, y se precargan todos de golpe.
 - **Preloader falso:** el porcentaje sale de `Math.random`, no mide la carga real.
+- **`baseUrl` obsoleto desde TS 6 (viene del Bug 0):** deja de funcionar en TS 7.
+  Migrar implica cambiar `paths` a `"./app/*"` y los imports por nombre de
+  `*.generated` en 22 archivos. Hacerlo cuando se actualice TypeScript.
+- **Editor y CLI con TypeScript distinto (viene del Bug 0):** VS Code usa su
+  TS 6.0.3 y el proyecto usa 5.9.3. Por eso VS Code muestra el aviso de
+  `baseUrl` en `tsconfig.json`. Pendiente que Sebas decida cómo alinear el
+  editor con el proyecto.
 
 ### Decisiones tomadas en el Paso 0
 
