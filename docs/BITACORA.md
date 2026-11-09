@@ -236,15 +236,54 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   de un `await` dentro de un event handler de React, y por qué TypeScript no lo
   avisa?
 
-## Bug 4 — Typecheck en verde ⏳
+## Bug 4 — Typecheck en verde ✅
 
 - **Hipótesis:** hay errores en la línea base, incluido `product: any` en el
   carrusel (debe usar los tipos que genera codegen para `HomepageProducts`).
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:**
+  - Los 3 errores de la línea base son de 3 fragmentos GraphQL que no existen
+    en ningún query del proyecto: `ProductFragment`, `ProductVariantFragment`,
+    `RecommendedProductFragment`. Confirmado con
+    `grep -n "^export type.*Fragment" storefrontapi.generated.d.ts`: ninguno
+    de los tres aparece.
+  - `ProductForm.tsx` y `ProductImage.tsx` (los dos primeros errores) son
+    componentes que **nadie importa** (`grep -rln "ProductForm\|ProductImage"`
+    solo encontró sus propios archivos). Sobraron del template original de
+    Hydrogen al recortar la tienda.
+  - `ProductItem.tsx` (tercer error) **sí se usa**, en
+    `collections.$handle.tsx` y `collections.all.tsx`, pero en ambos casos
+    solo se le pasa `CollectionItemFragment` o `ProductItemFragment`.
+    `RecommendedProductFragment` normalmente vendría de una sección de
+    "productos recomendados" en la página de producto, que esta tienda nunca
+    tuvo.
+  - `product: any` en el carrusel de `_index.tsx:276` no era un error de
+    `tsc` (un `any` explícito nunca lo es), pero anulaba a mano el tipo
+    correcto que ya generaba codegen: `HomepageProductsQuery['products']['nodes']`
+    (visible en `storefrontapi.generated.d.ts:384-403`), inferido vía
+    `useLoaderData<typeof loader>()`.
+- **Causa raíz:** restos de tipos del template estándar de Hydrogen que
+  quedaron sin limpiar al recortar la tienda a una sola categoría de producto
+  (camisetas), más una anotación `any` innecesaria que tapaba un tipo que ya
+  estaba bien generado.
+- **Fix:**
+  - Se borraron `ProductForm.tsx` y `ProductImage.tsx` (código muerto, 0
+    referencias).
+  - En `ProductItem.tsx` se quitó `RecommendedProductFragment` del import y
+    de la unión de tipos del prop `product`.
+  - En `_index.tsx:276` se quitó `: any` (y `: number` del índice, también
+    redundante) para que TypeScript infiera el tipo real desde el loader.
+- **Cómo verificar:** `npx tsc --noEmit` debe salir en 0 errores. Como los
+  cambios son solo de tipos o borrado de código sin uso, no debe verse ningún
+  cambio visual: la home con su carrusel y `/collections/...` deben verse
+  igual que antes.
+- **Pregunta de entrevista:** ¿por qué un `any` explícito nunca aparece como
+  error de `tsc`, aunque apague el chequeo de tipos en esa variable?
+
+> Nota aparte, no es parte de este bug: `app/routes/products.$handle.tsx`
+> define su propio `LoaderArgs` con `context: any` en vez de usar
+> `Route.LoaderArgs` de `./+types/products.$handle`. No es un error de
+> `tsc` y no estaba en la lista de bugs, así que se deja así. Si quieres, lo
+> agrego como un bug nuevo.
 
 ## Bug 5 ✍️ — El cursor desaparece al recargar o al volver de un producto ✅
 
