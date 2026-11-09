@@ -183,7 +183,8 @@ export default function Homepage() {
   // Función para manejar el envío de correo desde el formulario del footer
   const handleSendEmail = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const formData = new FormData(e.currentTarget);
+    const form = e.currentTarget;
+    const formData= new FormData(form);
     const email = formData.get('email');
     const message = formData.get('message');
 
@@ -196,7 +197,7 @@ export default function Homepage() {
       });
       if (res.ok) {
         setEmailStatus('¡Mensaje enviado con éxito!');
-        e.currentTarget.reset();
+        form.reset();
       } else {
         setEmailStatus('Error al enviar. Intenta de nuevo.');
       }
