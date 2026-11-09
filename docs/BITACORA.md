@@ -200,16 +200,41 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   es la que se filtró. Si lo es: revocarla, crear una nueva, pegarla en `.env` y
   reiniciar el dev server.
 
-## Bug 3 ✍️ — "Error de conexión" falso ⏳
+## Bug 3 ✍️ — "Error de conexión" falso ✅
 
 - **Hipótesis:** en `handleSendEmail` (`_index.tsx`), `e.currentTarget.reset()`
   va después del `await`. Para entonces `currentTarget` ya es `null`, se lanza un
   TypeError y el `catch` muestra "Error de conexión." aunque el correo sí salió.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix (lo escribe Sebas):** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:** confirmado. Sebas reprodujo el síntoma exacto: el correo
+  llegaba y la pantalla igual mostraba "Error de conexión.". En
+  `node_modules/react-dom/cjs/react-dom.development.js:9038-9043`,
+  `executeDispatch` pone `event.currentTarget = currentTarget` antes de llamar
+  al handler y `event.currentTarget = null` justo después. Una función `async`
+  le devuelve el control a React en el primer `await`, así que para React el
+  handler "ya terminó" cuando el `fetch` todavía está en vuelo.
+- **Causa raíz:** `e.currentTarget` se leía antes del `await` (línea 186, OK) y
+  otra vez después del `await` (línea 200, el bug). En el segundo punto React ya
+  puso `currentTarget` en `null`. `null.reset()` lanza un TypeError que el
+  `catch {}` (sin variable) se traga en silencio, y ese catch pone "Error de
+  conexión." aunque el fetch ya haya tenido éxito. TypeScript no lo marcó porque
+  el tipo de `currentTarget` es `HTMLFormElement` (nunca `null`): el tipo describe
+  el valor en el instante en que escribes la expresión, no lo que React hace con
+  el objeto evento después.
+- **Fix (lo escribió Sebas):** guardar `e.currentTarget` en una variable propia
+  (`const form = e.currentTarget;`) antes del `await`, y usar `form` en los dos
+  lugares (`new FormData(form)` y `form.reset()`) en vez de volver a leer
+  `e.currentTarget`. El primer intento de Sebas solo cambió el `FormData` y dejó
+  `e.currentTarget.reset()` intacto, así que el bug seguía igual; con `form.reset()`
+  en la línea 200 quedó resuelto.
+- **Cómo verificar:**
+  1. Enviar el formulario con un correo y un mensaje: debe aparecer
+     "¡Mensaje enviado con éxito!", los campos deben vaciarse y el correo debe
+     llegar.
+  2. DevTools → Network → Offline, enviar de nuevo: debe seguir apareciendo
+     "Error de conexión." para un fallo de red real (y no por el bug).
+- **Pregunta de entrevista:** ¿por qué `e.currentTarget` puede ser `null` después
+  de un `await` dentro de un event handler de React, y por qué TypeScript no lo
+  avisa?
 
 ## Bug 4 — Typecheck en verde ⏳
 
