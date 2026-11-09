@@ -528,15 +528,29 @@ future flags de React Router v8 (`v8_passThroughRequests`,
 > al redistribuir los archivos; pendiente decidir si se agrega un
 > `public/fonts/OFL.txt`.
 
-## Bug 10 ✍️ — Reseña inventada ⏳
+## Bug 10 ✍️ — Reseña inventada ✅ (⚠️ escrito por Claude)
+
+> **Este fix NO lo escribió Sebas.** Lo pidió explícitamente por una demo
+> con un cliente ("es una orden"), saltándose su propia regla de ✍️ y la de
+> un bug por respuesta. Repasar antes de explicarlo en una entrevista.
 
 - **Hipótesis:** "Simplemente perfecto — Reseña verificada de cliente en Bogotá"
   no es real. Reemplazar por un placeholder honesto.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix (lo escribe Sebas):** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:** confirmado en `_index.tsx:331-332`, pilar 2 de la sección
+  de pilares. La tienda no tiene sistema de reseñas ni clientes reales: el
+  texto presentaba una cita inventada como "verificada".
+- **Causa raíz:** texto de relleno generado por IA que se presenta como dato
+  real. En una tienda, una reseña falsa es publicidad engañosa, no un detalle
+  de diseño.
+- **Fix:** mismo `<h3>` y `<p>`, mismos estilos. Título "Opiniones de
+  clientes" y texto "Próximamente publicaremos reseñas de compradores
+  reales." Al quitar las comillas `"` crudas del JSX también desaparecieron
+  los 2 errores `react/no-unescaped-entities` de la línea base: ESLint en
+  `_index.tsx` pasó de 5 a **3** problemas.
+- **Cómo verificar:** en la sección de pilares, el segundo pilar ya no
+  muestra una cita ni la ciudad.
+- **Pregunta de entrevista:** ¿por qué una reseña inventada en una demo es
+  un bug y no solo un tema de contenido?
 
 ## Bug 11 — Márgenes laterales y header tapado en la home ✅
 
@@ -591,17 +605,54 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   también tiene `z-index: 1`, ¿cuál se pinta encima, y qué hace
   `isolation: isolate` para resolverlo sin tocar el header?
 
-## Bug 12 — No se pueden eliminar productos del carrito ⏳
+## Bug 12 — No se pueden eliminar productos del carrito ✅
 
-> Reportado por Sebas junto con el Bug 11. Registrado para hacerlo después.
+> Reportado por Sebas junto con el Bug 11. Hecho en la misma respuesta que
+> el Bug 10, por pedido explícito de Sebas (demo con cliente).
 
 - **Síntoma:** eliminar un producto del carrito no funciona.
-- **Hipótesis:** —
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:**
+  - **El carrito real funciona.** Prueba contra el dev server con `curl` y
+    cookies: `LinesAdd` en `/cart` → la línea aparece en `/cart`;
+    `LinesRemove` con su id → 0 líneas. El botón "Remove" del template
+    (`CartLineItem.tsx:146-165`) y la acción (`cart.tsx:34-36`) están bien.
+  - **El panel de la página de producto era una maqueta**
+    (`products.$handle.tsx`): `CARRITO (1)` escrito a mano, el contenido era
+    el producto que estás viendo (con "Talla Única" fijo) y no el carrito, el
+    subtotal era el precio de ese producto, y no había ningún botón para
+    eliminar. El propio código lo decía: "Mockup visual basado en el
+    producto actual". Por eso el header decía "Cart 6" y el panel siempre
+    mostraba uno.
+- **Causa raíz:** la UI del carrito personalizado nunca se conectó a los
+  datos del carrito. Se veía como un carrito, pero no leía nada.
+- **Fix:** el panel ahora lee el carrito que el loader de `root` ya expone
+  como promesa (`root.tsx:138`), con el mismo patrón del template
+  (`<Suspense>` + `<Await>` + `useOptimisticCart`):
+  - `CartCount`: contador real (`totalQuantity`) en el navbar.
+  - `CartLines`: una fila por línea real (imagen, título, cantidad, total) con
+    un botón **Eliminar** que usa `CartForm` + `LinesRemove` hacia `/cart`, la
+    misma acción que ya se probó que funciona. Con el carrito vacío muestra
+    "Tu carrito está vacío.".
+  - `CartSubtotal`: subtotal real del carrito.
+  - `useOptimisticCart` hace que la línea desaparezca al instante al hacer
+    clic, sin esperar la respuesta del servidor.
+  - Se mantuvo el diseño oscuro del panel: mismos tamaños, colores y
+    estructura que la maqueta.
+- **Cómo verificar:**
+  1. En un producto, "Agregar al Carrito" un par de veces: el navbar dice
+     `CARRITO (n)` con el número real y el panel lista los productos reales.
+  2. Clic en **Eliminar** en una línea: desaparece y el contador y el
+     subtotal bajan.
+  3. Eliminar todo: aparece "Tu carrito está vacío.".
+  4. Verificado por `curl`: con 2 unidades en el carrito, el HTML del
+     servidor trae `CARRITO (2)`, 1 botón Eliminar y "Cantidad: 2"; sin
+     carrito, 0 botones y el mensaje de vacío.
+- **Pregunta de entrevista:** ¿cómo distinguiste si el bug estaba en el
+  backend del carrito o en la interfaz, antes de tocar código?
+
+> **Encontrado y NO arreglado:** el botón "Finalizar Compra" del mismo panel
+> no hace nada (no enlaza a `cart.checkoutUrl`). Mismo origen (maqueta), pero
+> no era parte de este bug.
 
 ---
 
