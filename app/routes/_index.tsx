@@ -273,7 +273,7 @@ export default function Homepage() {
             <h2 style={{ color: '#8B2635', fontSize: '4rem', margin: 0, fontFamily: '"Playfair Display", serif' }}>CATÁLOGO</h2>
             <p style={{ color: '#D2D4C8', fontSize: '1.4rem', fontWeight: 300 }}>Piezas maestras diseñadas para el impacto.</p>
           </div>
-          {products.map((product: any, index: number) => (
+          {products.map((product, index) => (
             <div key={product.id} className="card-tilt-wrapper" style={{ transformOrigin: 'center bottom', minWidth: '40vw', height: '80vh' }}>
               <Link className="product-card" to={`/products/${product.handle}`} style={{ width: '100%', height: '100%', backgroundColor: '#121212', borderRadius: '16px', padding: '2rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', border: '1px solid #2E3532', textDecoration: 'none', color: '#E0E2DB' }}>
                 <div style={{ height: '75%', width: '100%', overflow: 'hidden', borderRadius: '8px' }}>
