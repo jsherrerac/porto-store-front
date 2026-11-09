@@ -4,7 +4,7 @@ import type { Route } from './+types/_index';
 import { Image } from '@shopify/hydrogen';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-import Lenis from '@studio-freight/lenis';
+import Lenis from 'lenis';
 
 export const meta: Route.MetaFunction = () => {
   return [{ title: 'PORTO — Store' }];
