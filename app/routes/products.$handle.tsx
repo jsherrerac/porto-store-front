@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLoaderData, Link } from 'react-router';
-import { Image, Money, CartForm } from '@shopify/hydrogen';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { Await, useLoaderData, useRouteLoaderData, Link } from 'react-router';
+import { Image, Money, CartForm, useOptimisticCart } from '@shopify/hydrogen';
 import gsap from 'gsap';
+import type { CartApiQueryFragment } from 'storefrontapi.generated';
+import type { RootLoader } from '~/root';
 
 type LoaderArgs = {
   context: any;
@@ -24,6 +26,7 @@ export async function loader({ context, params }: LoaderArgs) {
 export default function ProductDetail() {
   const { product } = useLoaderData<typeof loader>();
   const firstVariant = product.variants.nodes[0];
+  const cartPromise = useRouteLoaderData<RootLoader>('root')?.cart;
   
   // Estados para el Carrito Lateral
   const [isCartOpen, setIsCartOpen] = useState(false);
@@ -64,7 +67,7 @@ export default function ProductDetail() {
         </Link>
         <span style={{ fontFamily: '"Playfair Display", serif', fontSize: '1.5rem', color: '#8B2635' }}>PORTO</span>
         <button onClick={() => setIsCartOpen(true)} style={{ background: 'none', border: 'none', color: '#E0E2DB', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 600 }}>
-          CARRITO (1)
+          CARRITO (<Suspense fallback="0"><Await resolve={cartPromise}>{(cart) => <CartCount cart={cart} />}</Await></Suspense>)
         </button>
       </nav>
 
@@ -137,27 +140,22 @@ export default function ProductDetail() {
           </button>
         </div>
 
-        {/* Producto Añadido (Mockup visual basado en el producto actual) */}
+        {/* Productos del carrito real */}
         <div style={{ padding: '2rem', flex: 1, overflowY: 'auto' }}>
-          <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-            <div style={{ width: '100px', height: '120px', backgroundColor: '#121212', borderRadius: '12px', overflow: 'hidden' }}>
-              <Image data={product.featuredImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            </div>
-            <div>
-              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem', color: '#E0E2DB' }}>{product.title}</h3>
-              <p style={{ margin: 0, color: '#A0A0A0', fontSize: '1rem' }}>Talla Única</p>
-              <div style={{ marginTop: '1rem', fontWeight: 'bold', color: '#8B2635' }}>
-                <Money data={product.priceRange.minVariantPrice} />
-              </div>
-            </div>
-          </div>
+          <Suspense fallback={null}>
+            <Await resolve={cartPromise}>{(cart) => <CartLines cart={cart} />}</Await>
+          </Suspense>
         </div>
 
         {/* Footer del Carrito / Checkout */}
         <div style={{ padding: '2rem', borderTop: '1px solid #2E3532', backgroundColor: '#121212' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', fontSize: '1.2rem', fontWeight: 'bold' }}>
             <span>Subtotal</span>
-            <span><Money data={product.priceRange.minVariantPrice} /></span>
+            <span>
+              <Suspense fallback={null}>
+                <Await resolve={cartPromise}>{(cart) => <CartSubtotal cart={cart} />}</Await>
+              </Suspense>
+            </span>
           </div>
           <button style={{ backgroundColor: '#8B2635', color: '#E0E2DB', border: 'none', padding: '1.2rem', width: '100%', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '8px', cursor: 'pointer' }}>
             Finalizar Compra
@@ -165,6 +163,49 @@ export default function ProductDetail() {
         </div>
       </div>
 
+    </div>
+  );
+}
+
+function CartCount({ cart: originalCart }: { cart?: CartApiQueryFragment | null }) {
+  const cart = useOptimisticCart(originalCart);
+  return <>{cart?.totalQuantity ?? 0}</>;
+}
+
+function CartSubtotal({ cart: originalCart }: { cart?: CartApiQueryFragment | null }) {
+  const cart = useOptimisticCart(originalCart);
+  return cart?.cost?.subtotalAmount ? <Money data={cart.cost.subtotalAmount} /> : <>—</>;
+}
+
+function CartLines({ cart: originalCart }: { cart?: CartApiQueryFragment | null }) {
+  const cart = useOptimisticCart(originalCart);
+  const lines = cart?.lines?.nodes ?? [];
+
+  if (lines.length === 0) {
+    return <p style={{ margin: 0, color: '#A0A0A0', fontSize: '1rem' }}>Tu carrito está vacío.</p>;
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+      {lines.map((line) => (
+        <div key={line.id} style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
+          <div style={{ width: '100px', height: '120px', backgroundColor: '#121212', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
+            {line.merchandise.image && <Image data={line.merchandise.image} sizes="100px" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
+          </div>
+          <div>
+            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem', color: '#E0E2DB' }}>{line.merchandise.product.title}</h3>
+            <p style={{ margin: 0, color: '#A0A0A0', fontSize: '1rem' }}>Cantidad: {line.quantity}</p>
+            <div style={{ marginTop: '1rem', fontWeight: 'bold', color: '#8B2635' }}>
+              <Money data={line.cost.totalAmount} />
+            </div>
+            <CartForm route="/cart" action={CartForm.ACTIONS.LinesRemove} inputs={{ lineIds: [line.id] }}>
+              <button type="submit" disabled={!!line.isOptimistic} style={{ marginTop: '0.75rem', background: 'none', border: 'none', padding: 0, color: '#A0A0A0', fontSize: '0.9rem', textDecoration: 'underline', cursor: 'pointer' }}>
+                Eliminar
+              </button>
+            </CartForm>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
