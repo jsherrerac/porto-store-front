@@ -24,6 +24,7 @@
     "allowJs": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "types": [
       "@shopify/oxygen-workers-types",
