@@ -411,17 +411,71 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   función de animación en el mismo frame puede romper un cálculo de delta
   time, aunque ambos "funcionen" por separado?
 
-## Bug 8 — Limpieza de animaciones ⏳
+## Bug 8 — Limpieza de animaciones ✅
 
 - **Hipótesis:** `ScrollTrigger.getAll().forEach(t => t.kill())` mata todos los
   triggers de la app y no revierte las animaciones. Usar `gsap.context()` + `ctx.revert()`.
   Revisar también los listeners del botón magnético y el `body.style.overflow`
   del preloader.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:** tres fugas distintas en `_index.tsx`, todas con el mismo
+  patrón de fondo: el `return` de limpieza del efecto no deshacía todo lo que
+  el efecto había iniciado.
+  1. **`ScrollTrigger.getAll().forEach(t => t.kill())`:** `.kill()` para un
+     ScrollTrigger, pero no revierte los estilos inline que GSAP puso en
+     tweens que **no** están atados a un ScrollTrigger (el parallax del hero,
+     el "tilt" de las tarjetas del carrusel). Esos quedaban con su último
+     valor de `transform`/`rotateZ` aplicado para siempre.
+  2. **Listeners del botón magnético (`mousemove`/`mouseleave`):** se
+     registraban con funciones anónimas inline. El cleanup del efecto nunca
+     los quitaba — no podía, un anónimo no se puede pasar a
+     `removeEventListener`. Cada vez que el efecto se re-montaba, se sumaba
+     un par más de listeners sobre el mismo botón.
+  3. **`document.body.style.overflow = 'hidden'`** (preloader, efecto 1): solo
+     se revertía a `'auto'` dentro del `onComplete` del tween que corre
+     cuando la carga llega a 100%. Si el componente se desmontaba antes de
+     eso (por ejemplo, navegando a un producto mientras el preloader seguía
+     en pantalla), nada lo revertía: el scroll de **toda la app**, no solo de
+     esta página, quedaba bloqueado.
+- **Causa raíz:** el patrón repetido es "limpiar solo lo obvio" (el interval,
+  la instancia de Lenis) sin cubrir todo lo que el efecto deja corriendo:
+  animaciones sin ScrollTrigger, listeners del DOM y estilos globales fuera
+  del componente.
+- **Fix:**
+  - Las animaciones de scroll (parallax del hero, canvas 3D, carrusel, texto
+    revelado, pilares) se envolvieron en `gsap.context(() => {...})`. El
+    cleanup ahora llama `ctx.revert()` en vez de
+    `ScrollTrigger.getAll().forEach(kill)`: mata los ScrollTriggers **y**
+    revierte los estilos inline de todos los tweens creados dentro, tengan o
+    no ScrollTrigger.
+  - Los handlers del botón magnético (`handleMagneticMove`,
+    `handleMagneticLeave`) se guardaron en variables para poder quitarlos con
+    `removeEventListener` en el cleanup.
+  - Al escribir `handleMagneticLeave` con cuerpo de bloque (en vez de
+    `() => gsap.to(...)`, que devuelve el `Tween` sin querer) se corrigió de
+    paso uno de los 2 errores de ESLint (`no-misused-promises`) que ya
+    estaban en la línea base: los Tweens de GSAP son "thenable" (tienen
+    `.then()`), así que un handler que los devuelve se ve como una función
+    que retorna una promesa donde se esperaba `void`.
+  - En el efecto del preloader: se guardó el tween en una variable
+    (`preloaderTween`) y el cleanup ahora hace `preloaderTween?.kill()` y
+    `document.body.style.overflow = 'auto'` siempre, sin depender de que el
+    `onComplete` llegue a ejecutarse.
+- **Cómo verificar:**
+  1. Scroll normal: la home debe verse y sentirse igual que antes (parallax,
+     carrusel, pilares).
+  2. Fuga de listeners: entra a la home, pasa el mouse sobre el botón
+     "Explorar Colección" varias veces, navega a un producto y vuelve varias
+     veces. El botón debe seguir reaccionando una sola vez por movimiento, no
+     cada vez más "pegajoso".
+  3. Scroll bloqueado: entra a la home en una pestaña nueva (sin
+     `sessionStorage`) y, mientras el preloader todavía está en pantalla,
+     haz clic rápido en cualquier link para salir a otra página. El scroll
+     de esa otra página debe funcionar normalmente.
+  4. ESLint sobre `_index.tsx` ahora da **5 problemas** (antes 6): se arregló
+     uno de los dos `no-misused-promises` de la línea base.
+- **Pregunta de entrevista:** ¿por qué `ScrollTrigger.getAll().forEach(t =>
+  t.kill())` no es suficiente para limpiar animaciones de GSAP, y qué hace
+  distinto `gsap.context()` / `ctx.revert()`?
 
 ## Bug 9 — Hero sin imagen y con fuentes de sistema ⏳
 
