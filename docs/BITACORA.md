@@ -379,15 +379,37 @@ future flags de React Router v8 (`v8_passThroughRequests`,
 > `.gitignore`) y no afecta nada; se puede borrar a mano o se limpia sola en
 > la próxima instalación limpia.
 
-## Bug 7 — Lenis movido por dos relojes ⏳
+## Bug 7 — Lenis movido por dos relojes ✅
 
 - **Hipótesis:** `lenis.raf()` se llama desde un loop propio de `requestAnimationFrame`
   y también desde `gsap.ticker.add(...)`. Ninguno de los dos se limpia.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:** confirmado en `_index.tsx:101-106` (antes del fix): un
+  loop propio (`function raf(time) { lenis.raf(time); requestAnimationFrame(raf); }`)
+  y `gsap.ticker.add((time) => lenis.raf(time * 1000))` llamaban a `lenis.raf()`
+  en el mismo frame, cada uno con un origen de tiempo distinto (el reloj nativo
+  del navegador vs. el reloj interno de GSAP). El README de `lenis`, sección
+  "GSAP ScrollTrigger", solo usa `gsap.ticker.add(...)` como driver — nunca los
+  dos a la vez.
+- **Causa raíz:** se mezclaron dos patrones de integración alternativos (Lenis
+  solo vs. Lenis sincronizado con ScrollTrigger) en vez de usar uno solo.
+  Además, ninguno de los dos se limpiaba en el `return` del efecto: el loop de
+  `requestAnimationFrame` no guardaba su id para cancelarlo, y el callback de
+  `gsap.ticker.add` nunca se quitaba con `gsap.ticker.remove`. Los dos seguían
+  llamando `.raf()` sobre una instancia de Lenis ya destruida cada vez que el
+  efecto se desmontaba (en desarrollo, `StrictMode` lo hace dos veces).
+- **Fix:** se quitó el loop propio de `requestAnimationFrame` por completo.
+  El callback de `gsap.ticker.add` se guardó en una variable (`lenisRaf`) para
+  poder quitarlo con `gsap.ticker.remove(lenisRaf)` en el cleanup, antes de
+  `lenis.destroy()`.
+- **Cómo verificar:** el scroll de la home debe seguir sintiéndose igual
+  (smooth scroll con GSAP ScrollTrigger funcionando: el carrusel, el pin de
+  los "pilares", etc.). Para ver la limpieza en acción: navega de la home a
+  cualquier producto y vuelve — antes del fix, cada ida y vuelta dejaba un
+  reloj más corriendo en el fondo (visible en React DevTools Profiler o
+  simplemente porque el scroll se sentía cada vez más "pesado"); ahora no.
+- **Pregunta de entrevista:** ¿por qué tener dos relojes llamando a la misma
+  función de animación en el mismo frame puede romper un cálculo de delta
+  time, aunque ambos "funcionen" por separado?
 
 ## Bug 8 — Limpieza de animaciones ⏳
 
