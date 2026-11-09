@@ -99,10 +99,9 @@ export default function Homepage() {
     if (loading || typeof window === 'undefined') return;
 
     const lenis = new Lenis({ duration: 1.2, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)), smoothWheel: true });
-    function raf(time: number) { lenis.raf(time); requestAnimationFrame(raf); }
-    requestAnimationFrame(raf);
     lenis.on('scroll', ScrollTrigger.update);
-    gsap.ticker.add((time) => lenis.raf(time * 1000));
+    const lenisRaf = (time: number) => lenis.raf(time * 1000);
+    gsap.ticker.add(lenisRaf);
     gsap.ticker.lagSmoothing(0);
 
     if (heroBgRef.current) gsap.to(heroBgRef.current, { y: '20%', ease: 'none', scrollTrigger: { trigger: heroBgRef.current, start: 'top top', end: 'bottom top', scrub: true } });
@@ -177,7 +176,7 @@ export default function Homepage() {
       magneticBtn.addEventListener('mouseleave', () => gsap.to(magneticBtn, { x: 0, y: 0, duration: 0.7, ease: 'elastic.out(1, 0.3)' }));
     }
 
-    return () => { lenis.destroy(); ScrollTrigger.getAll().forEach((trigger) => trigger.kill()); };
+    return () => { gsap.ticker.remove(lenisRaf); lenis.destroy(); ScrollTrigger.getAll().forEach((trigger) => trigger.kill()); };
   }, [loading]);
 
   // Función para manejar el envío de correo desde el formulario del footer
