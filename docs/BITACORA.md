@@ -538,14 +538,64 @@ future flags de React Router v8 (`v8_passThroughRequests`,
 - **Cómo verificar:** —
 - **Pregunta de entrevista:** —
 
-## Bug 11 — Márgenes laterales y header tapado en la home ⏳
+## Bug 11 — Márgenes laterales y header tapado en la home ✅
 
 > Reportado por Sebas durante el Bug 9, con capturas. Se registró para
-> hacerlo en orden en vez de mezclarlo con el Bug 9.
+> hacerlo en orden en vez de mezclarlo con el Bug 9. Sebas pidió adelantarlo
+> antes del Bug 10.
 
 - **Síntoma:** al hacer scroll en la home (1) aparece una franja a la
   izquierda y otra a la derecha del contenido oscuro, y (2) la primera
   sección queda encima del header blanco ("Mock.shop") y lo oscurece.
+- **Diagnóstico:**
+  - **Franjas:** `app/styles/reset.css:81-83` (del template) define
+    `body > main { margin: 0 1rem 1rem 1rem; }` para todas las páginas. 1rem =
+    16 px, el ancho de las franjas de la captura. La home está diseñada a
+    sangre completa (secciones de `100%` y `100vw`), así que ese margen se ve
+    como un marco.
+  - **Header tapado:** `.header` (`app.css`) es `position: sticky; z-index: 1`.
+    Dentro de la home, el overlay oscuro del hero (`rgba(28,33,31,0.7)`,
+    `zIndex: 1`), el contenido del hero (`zIndex: 2`), el canvas y los
+    callouts (`zIndex: 1-2`) y los textos de los pilares (`zIndex: 1`) no
+    estaban dentro de ningún *stacking context* propio: competían con el
+    header en el contexto de toda la página. Con `z-index` igual, gana el que
+    viene después en el DOM, y la home viene después del header. Por eso el
+    header se veía gris: es blanco tapado por el overlay al 70%.
+- **Causa raíz:** (1) un margen global del template que no tiene sentido en
+  una página a sangre completa; (2) `z-index` de la home que "se escapan" al
+  nivel de la página en vez de quedarse dentro de su sección.
+- **Fix:**
+  - En el `<style>` de la home: `body main { margin: 0; }`. Solo existe
+    mientras la home está montada, así que las demás páginas conservan su
+    margen. Misma especificidad que `body > main` y viene después en el
+    documento, así que gana.
+  - `isolation: 'isolate'` en las 3 secciones con hijos con `zIndex` (hero,
+    canvas, pilares). Cada una crea su propio *stacking context*: sus
+    `z-index` solo ordenan cosas dentro de la sección, y la sección completa
+    queda debajo del header.
+  - **Tropiezo durante el fix:** el primer intento usaba `body > main`. React
+    escapa `>` como `&gt;` al renderizar en el servidor, y el navegador
+    **no** decodifica entidades dentro de `<style>` (lo trata como texto
+    crudo). La regla quedaba `body &gt; main`, inválida, y se ignoraba sin
+    error. Se detectó con `curl` sobre el HTML del servidor y se cambió el
+    selector por uno sin `>`.
+- **Cómo verificar:**
+  1. La home llega de borde a borde, sin franjas a los lados ni abajo.
+  2. Al hacer scroll, el header queda blanco y legible encima del hero, del
+     canvas (zapato) y de los pilares.
+  3. El preloader y el cursor custom siguen por encima de todo (sus
+     `z-index` 9998-10000 no están dentro de esas secciones).
+  4. Las demás páginas (`/collections/...`, producto) siguen con su margen de
+     1rem.
+- **Pregunta de entrevista:** si el header tiene `z-index: 1` y un overlay
+  también tiene `z-index: 1`, ¿cuál se pinta encima, y qué hace
+  `isolation: isolate` para resolverlo sin tocar el header?
+
+## Bug 12 — No se pueden eliminar productos del carrito ⏳
+
+> Reportado por Sebas junto con el Bug 11. Registrado para hacerlo después.
+
+- **Síntoma:** eliminar un producto del carrito no funciona.
 - **Hipótesis:** —
 - **Diagnóstico:** —
 - **Causa raíz:** —
