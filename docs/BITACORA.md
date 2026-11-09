@@ -153,17 +153,52 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   `npm ls`, un clon limpio con `npm ci` + build, o linters de imports no
   declarados.
 
-## Bug 2 — "Error al enviar" en el formulario ⏳
+## Bug 2 — "Error al enviar" en el formulario ✅ (no reproducible hoy + cast eliminado)
 
 - **Hipótesis:** la key de Resend en `.env` es inválida o falta (una anterior se
   filtró y hay que revocarla), o choca con la restricción de
   `onboarding@resend.dev`. Además, sobra el cast `(context as unknown as { env: Env }).env`
   y posiblemente `envContext` en `app/lib/env.ts`.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:**
+
+  | Hipótesis | Resultado | Evidencia |
+  |---|---|---|
+  | Key inválida o ausente | ❌ | `curl -X POST localhost:3000/api/send-email` con datos válidos → HTTP 200, `{"success":true,"data":{"id":"01a1be60-…"}}`, y el correo llegó a la bandeja de Sebas. |
+  | Restricción de `onboarding@resend.dev` | ❌ | El destino fijo `hrcorzosebas@gmail.com` (`api.send-email.tsx:42`) fue aceptado. |
+  | El formulario manda otra cosa | ❌ | `_index.tsx:192-196` manda el mismo JSON (`email`, `message`) que el `curl`. |
+  | `context.env` ya viene tipado | ✅ | El template lo usa sin cast (`entry.server.tsx:19`, `root.tsx:75`). Con el compilador: `context.env → Env`, `env.RESEND_API_KEY → string` (no `any`). |
+  | `envContext` no se usa | ✅ | `grep`: solo aparece donde se define (`app/lib/env.ts:11`). |
+
+  Prueba de Sebas en el navegador: el formulario muestra **"Error de conexión."**
+  pero **el correo sí llega** con el mensaje escrito. Ese es el síntoma del Bug 3.
+  `.env` no se leyó durante este bug.
+- **Causa raíz:**
+  - *"Error al enviar" de la grabación:* **no determinada.** Hoy el endpoint
+    funciona de punta a punta y no se recuperó el log `Error de Resend:` de
+    cuando se grabó. Posibles explicaciones, sin verificar: cambio de key,
+    reinicio del server, o la grabación es de antes del cambio del SDK a `fetch`.
+  - *Cast:* `as unknown as {...}` obliga a TypeScript a aceptar cualquier tipo y
+    apaga la revisión en esa línea. Los casts se borran al compilar, así que no
+    cambiaban nada en ejecución; solo quitaban la red de seguridad.
+    `envContext` (`createContext` de React Router) era código muerto.
+- **Fix:** `const env = context.env;` y borrar el `import type { Env }` que ya no
+  se usa en `api.send-email.tsx`. En `app/lib/env.ts` se borran `envContext` y su
+  import. El tipo `Env` se queda, porque `env.d.ts:5` lo usa para extender el
+  `Env` global.
+- **Cómo verificar:** typecheck con los mismos 3 errores de la línea base
+  (0 nuevos). POST con mensaje vacío → `400 Datos inválidos` (la ruta compila y
+  corre sin enviar correo). En el navegador: enviar el formulario y confirmar
+  que el correo llega. El mensaje en pantalla todavía es incorrecto hasta el Bug 3.
+- **Pregunta de entrevista:** *"Un endpoint responde 200 cuando lo pruebas con
+  `curl`, pero el formulario muestra un error. ¿Cómo aíslas dónde está el
+  problema?"* Puntos clave: probar capa por capa (endpoint solo → formulario);
+  comparar el payload de las dos llamadas; leer el log del server en vez de
+  confiar en el mensaje de la interfaz; mirar si el efecto real (el correo)
+  ocurrió aunque la interfaz diga que falló. Pregunta extra: *¿qué hace
+  `as unknown as X` en ejecución?* Nada: se borra al compilar.
+- **🔐 Pendiente de Sebas:** confirmar en Resend → API Keys que la key en uso no
+  es la que se filtró. Si lo es: revocarla, crear una nueva, pegarla en `.env` y
+  reiniciar el dev server.
 
 ## Bug 3 ✍️ — "Error de conexión" falso ⏳
 

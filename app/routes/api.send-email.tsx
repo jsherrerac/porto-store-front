@@ -1,6 +1,5 @@
 
 import type { Route } from './+types/api.send-email';
-import type { Env } from '../lib/env';
 
 export async function action({ request, context }: Route.ActionArgs) {
   if (request.method !== 'POST') {
@@ -30,7 +29,7 @@ export async function action({ request, context }: Route.ActionArgs) {
       );
     }
 
-    const env = (context as unknown as { env: Env }).env;
+    const env = context.env;
 
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
