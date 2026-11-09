@@ -477,16 +477,56 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   t.kill())` no es suficiente para limpiar animaciones de GSAP, y qué hace
   distinto `gsap.context()` / `ctx.revert()`?
 
-## Bug 9 — Hero sin imagen y con fuentes de sistema ⏳
+## Bug 9 — Hero sin imagen y con fuentes de sistema ✅
 
 - **Hipótesis:** la CSP de `app/entry.server.tsx` bloquea `images.unsplash.com`,
   `fonts.googleapis.com` y `fonts.gstatic.com`. Decisión pendiente de Sebas:
   (a) permitir dominios o (b) servir los recursos desde el proyecto.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix:** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico:**
+  - `entry.server.tsx:17-22` usa `createContentSecurityPolicy` de Hydrogen
+    sin directivas propias. El header real que manda el dev server
+    (`curl -sI http://localhost:3000/`) es:
+    `default-src 'self' https://cdn.shopify.com https://shopify.com http://localhost:* 'nonce-…'; style-src 'self' 'unsafe-inline' https://cdn.shopify.com http://localhost:*; connect-src …`
+  - **No hay `img-src` ni `font-src`**: el navegador usa `default-src` como
+    respaldo, y ahí no están Unsplash ni `fonts.gstatic.com`.
+  - **`style-src` sí existe** y no incluye `fonts.googleapis.com`, así que
+    los `@import` de Google Fonts (`_index.tsx:230` y `app/styles/app.css:1`)
+    también se bloqueaban.
+  - Las 3 URLs responden 200 OK con `curl -sI`: no estaban rotas, las
+    bloqueaba el navegador.
+- **Causa raíz:** el código cargaba recursos de terceros (Unsplash, Google
+  Fonts) en un proyecto cuya CSP por defecto solo permite `'self'` y Shopify.
+  En desarrollo el síntoma es silencioso: no hay error en la página, solo
+  líneas `Refused to load…` en la consola.
+- **Decisión de Sebas:** (b) auto-hospedar. Ventajas frente a (a): la CSP
+  queda estricta, ninguna visita hace peticiones a terceros (privacidad) y no
+  dependes de que Unsplash o Google estén arriba. Costo: ~400 KB de archivos
+  en el repo.
+- **Fix:**
+  - `public/hero-bg.jpg`: la misma foto de Unsplash, descargada (2070×1380,
+    286 KB). El `backgroundImage` del hero ahora apunta a `/hero-bg.jpg`.
+  - `public/fonts/`: solo el subset `latin` (`U+0000-00FF`, que ya cubre á,
+    é, ñ, ¿, ¡) de Inter y Playfair Display. Son fuentes variables: un archivo
+    sirve para todos los pesos, así que son 3 archivos (~108 KB en total).
+  - `app/styles/app.css`: el `@import` remoto se reemplazó por 3 `@font-face`
+    locales. Como `app.css` se carga en todas las páginas, se quitó el
+    `@import` duplicado del `<style>` de `_index.tsx`.
+  - `entry.server.tsx` no se tocó: todo sale de `'self'`.
+- **Cómo verificar:**
+  1. Recarga la home con caché vacía (Ctrl+Shift+R): el hero muestra la foto
+     y "PORTO" sale en Playfair Display (serif con remates finos), no en
+     Times.
+  2. F12 → Console: ya no hay líneas `Refused to load…`.
+  3. F12 → Network, filtro "Font": las 3 fuentes vienen de `localhost:3000/fonts/…`,
+     ninguna de `gstatic.com`.
+- **Pregunta de entrevista:** si una directiva como `img-src` no aparece en
+  la CSP, ¿qué regla aplica el navegador a las imágenes, y por qué eso hizo
+  que el bug fuera silencioso?
+
+> Nota: Inter y Playfair Display usan la licencia SIL Open Font License
+> 1.1, que permite auto-hospedarlas. La OFL pide incluir el aviso de licencia
+> al redistribuir los archivos; pendiente decidir si se agrega un
+> `public/fonts/OFL.txt`.
 
 ## Bug 10 ✍️ — Reseña inventada ⏳
 
@@ -495,6 +535,21 @@ future flags de React Router v8 (`v8_passThroughRequests`,
 - **Diagnóstico:** —
 - **Causa raíz:** —
 - **Fix (lo escribe Sebas):** —
+- **Cómo verificar:** —
+- **Pregunta de entrevista:** —
+
+## Bug 11 — Márgenes laterales y header tapado en la home ⏳
+
+> Reportado por Sebas durante el Bug 9, con capturas. Se registró para
+> hacerlo en orden en vez de mezclarlo con el Bug 9.
+
+- **Síntoma:** al hacer scroll en la home (1) aparece una franja a la
+  izquierda y otra a la derecha del contenido oscuro, y (2) la primera
+  sección queda encima del header blanco ("Mock.shop") y lo oscurece.
+- **Hipótesis:** —
+- **Diagnóstico:** —
+- **Causa raíz:** —
+- **Fix:** —
 - **Cómo verificar:** —
 - **Pregunta de entrevista:** —
 
