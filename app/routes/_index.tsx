@@ -227,7 +227,6 @@ export default function Homepage() {
   return (
     <div style={{ backgroundColor: '#2E3532', color: '#E0E2DB', minHeight: '100vh', overflowX: 'hidden', fontFamily: '"Inter", sans-serif', cursor: 'none' }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Playfair+Display:ital,wght@0,400;0,700;1,400&display=swap');
         * { cursor: none !important; }
         
         /* ADIÓS AL EFECTO DE HUNDIRSE: Solo dejamos una transición sutil de brillo o borde limpio */
@@ -257,7 +256,7 @@ export default function Homepage() {
 
       {/* SECCIÓN 1: HERO */}
       <section style={{ height: '100vh', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center', overflow: 'hidden' }}>
-        <div ref={heroBgRef} style={{ position: 'absolute', top: '-10%', left: 0, width: '100%', height: '120%', backgroundImage: 'url("https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=2070&auto=format&fit=crop")', backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0 }} />
+        <div ref={heroBgRef} style={{ position: 'absolute', top: '-10%', left: 0, width: '100%', height: '120%', backgroundImage: 'url("/hero-bg.jpg")', backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0 }} />
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', backgroundColor: 'rgba(28, 33, 31, 0.7)', zIndex: 1 }} />
         <div style={{ zIndex: 2 }}>
           <h1 className="hero-title" style={{ fontSize: '6rem', color: '#E0E2DB', textTransform: 'uppercase', letterSpacing: '0.15em', margin: 0, fontFamily: '"Playfair Display", serif', fontWeight: 700 }}>PORTO</h1>
