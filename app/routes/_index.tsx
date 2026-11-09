@@ -39,6 +39,22 @@ export default function Homepage() {
   const pillar4Ref = useRef<HTMLDivElement>(null);
   const magneticButtonRef = useRef<HTMLButtonElement>(null);
 
+  //mouse
+  useEffect(()=>{
+    const dot = cursorDotRef.current;
+    const follower= cursorFollowerRef.current;
+    if (!dot||!follower) return;
+      const moveDot = gsap.quickTo(dot, "x", { duration: 0.1, ease: "power3" });
+      const moveDotY = gsap.quickTo(dot, "y", { duration: 0.1, ease: "power3" });
+      const moveFollower = gsap.quickTo(follower, "x", { duration: 0.5, ease: "power3" });
+      const moveFollowerY = gsap.quickTo(follower, "y", { duration: 0.5, ease: "power3" });
+      const onMouseMove=(e:MouseEvent)=>{
+        moveDot(e.clientX); moveDotY(e.clientY); moveFollower(e.clientX); moveFollowerY(e.clientY);
+      }
+      window.addEventListener('mousemove', onMouseMove);
+      return()=>window.removeEventListener('mousemove', onMouseMove);
+
+  },[]);
   // 1. Preloader con sessionStorage para que no canse al volver de los productos
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -52,19 +68,7 @@ export default function Homepage() {
     }
 
     document.body.style.overflow = 'hidden';
-
-    const cursorDot = cursorDotRef.current;
-    const cursorFollower = cursorFollowerRef.current;
-    if (cursorDot && cursorFollower) {
-      const moveDot = gsap.quickTo(cursorDot, "x", { duration: 0.1, ease: "power3" });
-      const moveDotY = gsap.quickTo(cursorDot, "y", { duration: 0.1, ease: "power3" });
-      const moveFollower = gsap.quickTo(cursorFollower, "x", { duration: 0.5, ease: "power3" });
-      const moveFollowerY = gsap.quickTo(cursorFollower, "y", { duration: 0.5, ease: "power3" });
-
-      window.addEventListener('mousemove', (e) => {
-        moveDot(e.clientX); moveDotY(e.clientY); moveFollower(e.clientX); moveFollowerY(e.clientY);
-      });
-    }
+    
 
     let currentProgress = 0;
     const interval = setInterval(() => {

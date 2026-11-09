@@ -221,16 +221,58 @@ future flags de React Router v8 (`v8_passThroughRequests`,
 - **Cómo verificar:** —
 - **Pregunta de entrevista:** —
 
-## Bug 5 ✍️ — El cursor desaparece al recargar o al volver de un producto ⏳
+## Bug 5 ✍️ — El cursor desaparece al recargar o al volver de un producto ✅
+
+> Se adelantó antes del Bug 3: los dos tocan `_index.tsx`, y Sebas ya tenía
+> escrito el fix del cursor. Así cada bug queda en su propio commit.
 
 - **Hipótesis:** si `sessionStorage` tiene `porto_loaded`, el primer `useEffect`
   hace `return` antes de registrar el `mousemove` del cursor custom, pero
   `* { cursor: none !important; }` sigue activo. Además, el listener nunca se quita.
-- **Diagnóstico:** —
-- **Causa raíz:** —
-- **Fix (lo escribe Sebas):** —
-- **Cómo verificar:** —
-- **Pregunta de entrevista:** —
+- **Diagnóstico (código original, commit `9622483`):**
+  - Confirmado: `_index.tsx:48-51` hace `return` si existe `porto_loaded`,
+    **antes** del `addEventListener('mousemove', ...)` de la línea 64.
+  - Confirmado: `_index.tsx:208` oculta el cursor nativo con
+    `* { cursor: none !important; }`, y lo hace siempre.
+  - Confirmado: el listener era una función anónima y el cleanup del efecto solo
+    hacía `clearInterval`. Nunca se quitaba, y no se podía quitar porque
+    `removeEventListener` necesita la misma referencia.
+  - Agravante: `entry.client.tsx:14` usa `<StrictMode>`, que en desarrollo monta,
+    desmonta y vuelve a montar los efectos. Con el código viejo quedaban 2
+    listeners en la primera carga de cada pestaña.
+- **Causa raíz:** un solo `useEffect` hacía dos cosas (preloader y cursor), y el
+  `return` temprano pensado para saltarse el preloader también se saltaba el
+  cursor. Tras recargar o volver de un producto, el cursor nativo seguía oculto
+  y el custom no se movía: no había cursor visible.
+- **Fix (escrito por Sebas):** el cursor pasa a un `useEffect` propio, con
+  dependencias `[]`, que no depende de `porto_loaded`. El handler tiene nombre
+  (`onMouseMove`) y el cleanup lo quita con `removeEventListener`. El bloque viejo
+  sale del efecto del preloader.
+- **Revisión:**
+  - ✅ Los refs existen al montar: `cursor-dot` y `cursor-follower` se
+    renderizan sin condición (`_index.tsx:228-229`).
+  - ✅ Typecheck: los mismos 3 errores de la línea base (0 nuevos).
+  - ✅ ESLint (con la API de Node, comparando `HEAD` con la versión nueva): 6
+    problemas antes y los mismos 6 después; ninguno en las líneas 42-72.
+  - Detalles no bloqueantes: (1) la línea 71 quedó con 4 espacios y sin código,
+    lo que mete ruido en el diff; (2) el formato no sigue el del resto del archivo
+    (`()=>{`, `follower=`, `!dot||!follower`, la sangría del cuerpo, falta `;`
+    después de la función). Se pueden alinear en el Bug 8, que vuelve a tocar
+    estos efectos. (3) Los `quickTo` no se matan en el cleanup; queda para el
+    Bug 8 (`gsap.context` + `revert`).
+- **Cómo verificar (navegador):** en la misma pestaña, con `porto_loaded` ya
+  guardado, F5 → el punto y el círculo siguen al mouse. Ir a un producto y
+  volver → el cursor sigue funcionando. En la consola de DevTools,
+  `getEventListeners(window).mousemove` en la home → 1 listener; en la PDP →
+  `undefined` (el cleanup lo quitó).
+- **Pregunta de entrevista:** *"¿Por qué un `useEffect` que agrega un event
+  listener tiene que devolver una función de limpieza, y qué pasa en desarrollo
+  con StrictMode si no lo hace?"* Puntos clave: el cleanup corre al desmontar y
+  antes de volver a ejecutar el efecto; StrictMode ejecuta los efectos dos veces
+  en desarrollo justo para destapar cleanups que faltan; `removeEventListener`
+  necesita la misma referencia (una función anónima no se puede quitar); un
+  `return` temprano corta todo lo que viene después, así que conviene un efecto
+  por responsabilidad.
 
 ## Bug 6 ✍️ — `@studio-freight/lenis` deprecado ⏳
 
@@ -306,6 +348,13 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   y "Could not generate bundle analysis summary". Son del plugin de análisis del
   Shopify CLI con Vite 8/Rolldown: el build termina bien (exit 0). No es de
   nuestro código.
+- **Línea base de ESLint en `_index.tsx` (viene del Bug 5), 6 problemas:**
+  `import/no-named-as-default` (import de `gsap`), 2× `@typescript-eslint/no-misused-promises`
+  (una promesa dentro de un listener, y `onSubmit={handleSendEmail}` es async),
+  `react/no-array-index-key`, 2× `react/no-unescaped-entities` (comillas `"` en
+  el JSX). Ojo: `git show ... | npx eslint --stdin` en Git Bash rompe las tildes y
+  da cientos de falsos positivos; para comparar hay que usar la API de Node
+  (`ESLint.lintText`).
 
 ### Decisiones tomadas en el Paso 0
 
