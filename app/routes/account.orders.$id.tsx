@@ -119,7 +119,7 @@ export default function OrderRoute() {
                   {discountPercentage ? (
                     <span>-{discountPercentage}% OFF</span>
                   ) : (
-                    discountValue && <Money data={discountValue!} />
+                    discountValue && <Money as="span" data={discountValue!} />
                   )}
                 </td>
               </tr>
@@ -132,7 +132,7 @@ export default function OrderRoute() {
                 <p>Subtotal</p>
               </th>
               <td>
-                <Money data={order.subtotal!} />
+                <Money as="span" data={order.subtotal!} />
               </td>
             </tr>
             <tr>
@@ -143,7 +143,7 @@ export default function OrderRoute() {
                 <p>Tax</p>
               </th>
               <td>
-                <Money data={order.totalTax!} />
+                <Money as="span" data={order.totalTax!} />
               </td>
             </tr>
             <tr>
@@ -154,7 +154,7 @@ export default function OrderRoute() {
                 <p>Total</p>
               </th>
               <td>
-                <Money data={order.totalPrice!} />
+                <Money as="span" data={order.totalPrice!} />
               </td>
             </tr>
           </tfoot>
@@ -211,11 +211,11 @@ function OrderLineRow({lineItem}: {lineItem: OrderLineItemFullFragment}) {
         </div>
       </td>
       <td>
-        <Money data={lineItem.price!} />
+        <Money as="span" data={lineItem.price!} />
       </td>
       <td>{lineItem.quantity}</td>
       <td>
-        <Money data={lineItem.totalDiscount!} />
+        <Money as="span" data={lineItem.totalDiscount!} />
       </td>
     </tr>
   );
