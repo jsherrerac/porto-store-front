@@ -1,0 +1,26 @@
+# Revisa cada push y cada pull request en una máquina limpia.
+# Si algo solo funciona "en mi PC" (una dependencia sin declarar, un error de
+# tipos), aquí falla antes de llegar a producción.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # npm ci instala exactamente lo del package-lock.json, y falla si el
+      # lock y el package.json no coinciden.
+      - run: npm ci
+      - run: npm run codegen
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npx shopify hydrogen build

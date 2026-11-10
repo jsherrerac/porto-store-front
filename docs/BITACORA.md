@@ -695,3 +695,77 @@ future flags de React Router v8 (`v8_passThroughRequests`,
   porque git no entiende el prefijo `./`. La regla que funciona es `public/frames/`.
 - **`tsconfig.tsbuildinfo` se agrega al `.gitignore` dentro del Bug 0.** Lo
   genera el typecheck (`"incremental": true`) y hoy queda sin trackear.
+
+---
+
+# Fase 2 — Construcción de la tienda (rama `feat/porto-v1`, 2026-11-09)
+
+⚠️ **Esta fase la escribió Claude (Fable 5.2 / Opus 5.5) a pedido de Sebas**,
+sin el ritmo de "un bug a la vez" de la Fase 1. Todo lo de abajo está por
+estudiar: la guía al final dice en qué orden.
+
+## Qué cambió
+
+| Área | Antes (borrador de Gemini) | Ahora |
+|---|---|---|
+| Diseño | Verde, vino, Inter + Playfair, estilos inline | Blanco y negro, un acento (azul azulejo), una fuente variable (Archivo), `tokens.css` |
+| Home | Un archivo de 395 líneas | `components/home/*`: escena 3D, manifiesto, galería, líneas, datos |
+| "3D" | 160 PNG de un tenis de origen desconocido | Esfera de partículas con Three.js y shaders, sin assets |
+| Preloader | Porcentaje falso con `Math.random` | Eliminado |
+| Cursor | Ocultaba el cursor del sistema en todo el sitio | Anillo decorativo solo con mouse; el cursor real siempre se ve |
+| Scroll suave | Dentro de la home | Global (`SmoothScroll.tsx`), se pausa con paneles abiertos |
+| Catálogo | Template de Hydrogen en inglés | Hombre / Mujer / Unisex / Novedades, orden en la URL |
+| Producto | Una sola variante, carrito propio duplicado | Variantes en la URL, galería, recomendaciones, carrito global |
+| Contacto | `fetch` JSON, destinatario en el código | `useFetcher` + action, validación en servidor, destinatario en `CONTACT_EMAIL` |
+| Calidad | Sin CI | `.github/workflows/ci.yml` con typecheck, lint y build |
+
+## Bugs encontrados durante la construcción
+
+- **Esfera casi invisible en pantallas verticales.** El desvanecido por
+  profundidad usaba números fijos pensados para la cámara a 6 unidades; en
+  vertical la cámara se aleja a 8.5 y todos los puntos quedaban casi
+  transparentes. Fix: pasar la distancia de la cámara al shader (`uCameraZ`).
+- **Error de hidratación en toda la home.** `<Money>` de Hydrogen pinta un
+  `<div>` y estaba dentro de un `<p>`. El navegador cierra el `<p>` al
+  encontrar el `<div>`, así que el HTML real no coincide con el que React
+  espera y React descarta todo el HTML del servidor. Se encontró comparando
+  el HTML del servidor con el DOM y leyendo el aviso
+  `validateDOMNesting` en la consola. Fix: `<Money as="span">` en todos lados.
+
+## Verificación
+
+- `npm run typecheck`: 0 errores (comprobado que de verdad revisa: un error a
+  propósito sí se detecta).
+- `npx eslint app`: 0 problemas.
+- `shopify hydrogen build`: OK. Three.js sale en su propio archivo
+  (`ThreeScene-*.js`, ≈125 kB gzip).
+- En el navegador: home (escritorio), catálogo con orden, producto con cambio
+  de talla, agregar al carrito, panel del carrito con checkout, contacto.
+- Los commits intermedios de esta fase no se verificaron uno por uno; el
+  último sí.
+
+## Pendiente
+
+- **Fotos propias.** El catálogo es de mock.shop (inglés, CAD). Para que sea
+  "tu marca" hace falta una tienda Shopify propia (o de desarrollo) con tus
+  productos, y conectarla con `npx shopify hydrogen link`.
+- **`PUBLIC_WHATSAPP_NUMBER`** en `.env` para que aparezca el botón.
+- **Deploy en Oxygen** (necesita la tienda propia del punto anterior).
+- `public/frames/` (los PNG del tenis) ya no se usa: puedes borrar la carpeta.
+- Revisar en un celular real: el pin de la escena 3D con la barra del
+  navegador que aparece y desaparece.
+
+## Guía de estudio (en este orden)
+
+1. `app/styles/tokens.css` — de dónde sale cada color, tamaño y espacio.
+2. `app/root.tsx` → `components/PageLayout.tsx` — el marco de todas las páginas.
+3. `routes/collections.$handle.tsx` + `lib/sort.ts` — loader, GraphQL y estado en la URL.
+4. `routes/products.$handle.tsx` + `components/product/ProductForm.tsx` — variantes, `await` vs promesa (streaming).
+5. `components/Aside.tsx` + `CartMain.tsx` — contexto de React, carrito optimista, foco accesible.
+6. `components/SmoothScroll.tsx` + `lib/motion.ts` — Lenis y GSAP con un solo reloj.
+7. `components/home/ProductRail.tsx` — el pin horizontal (`scrollWidth − innerWidth`).
+8. `components/home/HeroStage.tsx` + `ThreeScene.tsx` — `lazy()`, refs sin re-render, shaders.
+9. `routes/api.send-email.tsx` + `lib/contact.ts` — action, validación y por qué el destinatario es fijo.
+
+Para cada archivo, la prueba es la misma de la Fase 1: explicarlo en voz alta
+sin mirarlo.
