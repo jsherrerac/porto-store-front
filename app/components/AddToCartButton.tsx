@@ -1,6 +1,11 @@
 import {type FetcherWithComponents} from 'react-router';
 import {CartForm, type OptimisticCartLineInput} from '@shopify/hydrogen';
 
+/**
+ * Formulario de Hydrogen que agrega líneas al carrito. Envía un POST a la
+ * ruta /cart (su action llama a la Storefront API) usando un fetcher, así
+ * que la página no se recarga.
+ */
 export function AddToCartButton({
   analytics,
   children,
@@ -16,7 +21,7 @@ export function AddToCartButton({
 }) {
   return (
     <CartForm route="/cart" inputs={{lines}} action={CartForm.ACTIONS.LinesAdd}>
-      {(fetcher: FetcherWithComponents<any>) => (
+      {(fetcher: FetcherWithComponents<unknown>) => (
         <>
           <input
             name="analytics"
@@ -25,10 +30,11 @@ export function AddToCartButton({
           />
           <button
             type="submit"
+            className="button button--full"
             onClick={onClick}
             disabled={disabled ?? fetcher.state !== 'idle'}
           >
-            {children}
+            {fetcher.state !== 'idle' ? 'Agregando…' : children}
           </button>
         </>
       )}

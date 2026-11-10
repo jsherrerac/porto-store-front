@@ -2,60 +2,34 @@ import * as React from 'react';
 import {Pagination} from '@shopify/hydrogen';
 
 /**
- * <PaginatedResourceSection> encapsulates the previous and next pagination behaviors throughout your application.
+ * Paginación por cursores de la Storefront API ("ver más"), no por número de
+ * página: Shopify devuelve un cursor y con él se pide el siguiente bloque.
+ * <Pagination> de Hydrogen guarda los bloques ya cargados al navegar.
  */
 export function PaginatedResourceSection<NodesType>({
   connection,
   children,
-  ariaLabel,
   resourcesClassName,
 }: {
   connection: React.ComponentProps<typeof Pagination<NodesType>>['connection'];
   children: React.FunctionComponent<{node: NodesType; index: number}>;
-  ariaLabel?: string;
   resourcesClassName?: string;
 }) {
   return (
     <Pagination connection={connection}>
-      {({nodes, isLoading, PreviousLink, NextLink}) => {
-        const resourcesMarkup = nodes.map((node, index) =>
-          children({node, index}),
-        );
-
-        return (
-          <div>
-            <PreviousLink>
-              {isLoading ? (
-                'Loading...'
-              ) : (
-                <span>
-                  <span aria-hidden="true">↑</span> Load previous
-                </span>
-              )}
-            </PreviousLink>
-            {resourcesClassName ? (
-              <div
-                aria-label={ariaLabel}
-                className={resourcesClassName}
-                role={ariaLabel ? 'region' : undefined}
-              >
-                {resourcesMarkup}
-              </div>
-            ) : (
-              resourcesMarkup
-            )}
-            <NextLink>
-              {isLoading ? (
-                'Loading...'
-              ) : (
-                <span>
-                  Load more <span aria-hidden="true">↓</span>
-                </span>
-              )}
-            </NextLink>
+      {({nodes, isLoading, PreviousLink, NextLink}) => (
+        <div className="paginated">
+          <PreviousLink className="button button--ghost paginated__link">
+            {isLoading ? 'Cargando…' : 'Ver las anteriores'}
+          </PreviousLink>
+          <div className={resourcesClassName}>
+            {nodes.map((node, index) => children({node, index}))}
           </div>
-        );
-      }}
+          <NextLink className="button button--ghost paginated__link">
+            {isLoading ? 'Cargando…' : 'Ver más prendas'}
+          </NextLink>
+        </div>
+      )}
     </Pagination>
   );
 }

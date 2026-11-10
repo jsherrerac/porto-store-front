@@ -1,135 +1,95 @@
 import {redirect, useLoaderData} from 'react-router';
 import type {Route} from './+types/collections.$handle';
 import {getPaginationVariables, Analytics} from '@shopify/hydrogen';
+import type {ProductCardFragment} from 'storefrontapi.generated';
 import {PaginatedResourceSection} from '~/components/PaginatedResourceSection';
+import {ProductCard} from '~/components/ProductCard';
+import {SortLinks} from '~/components/SortLinks';
+import {collectionLabel, SITE} from '~/config/site';
+import {PRODUCT_CARD_FRAGMENT} from '~/lib/fragments';
 import {redirectIfHandleIsLocalized} from '~/lib/redirect';
-import {ProductItem} from '~/components/ProductItem';
-import type {ProductItemFragment} from 'storefrontapi.generated';
+import {parseSort, SORT_PARAM, toCollectionSort} from '~/lib/sort';
 
 export const meta: Route.MetaFunction = ({data}) => {
-  return [{title: `Hydrogen | ${data?.collection.title ?? ''} Collection`}];
+  const label = data
+    ? collectionLabel(data.collection.handle, data.collection.title)
+    : 'Colección';
+  return [
+    {title: label + ' — ' + SITE.name},
+    {name: 'description', content: 'Ropa de ' + label + ' en ' + SITE.name + '.'},
+  ];
 };
 
-export async function loader(args: Route.LoaderArgs) {
-  // Start fetching non-critical data without blocking time to first byte
-  const deferredData = loadDeferredData(args);
-
-  // Await the critical data required to render initial state of the page
-  const criticalData = await loadCriticalData(args);
-
-  return {...deferredData, ...criticalData};
-}
-
 /**
- * Load data necessary for rendering content above the fold. This is the critical data
- * needed to render the page. If it's unavailable, the whole page should 400 or 500 error.
+ * Corre en el servidor en cada visita a /collections/<handle>.
+ * Lee el handle de la ruta y el orden de la query (?orden=...), y le pide a
+ * Shopify exactamente esa página de productos ya ordenada.
  */
-async function loadCriticalData({context, params, request}: Route.LoaderArgs) {
+export async function loader({context, params, request}: Route.LoaderArgs) {
   const {handle} = params;
   const {storefront} = context;
-  const paginationVariables = getPaginationVariables(request, {
-    pageBy: 8,
-  });
 
   if (!handle) {
     throw redirect('/collections');
   }
 
-  const [{collection}] = await Promise.all([
-    storefront.query(COLLECTION_QUERY, {
-      variables: {handle, ...paginationVariables},
-      // Add other queries here, so that they are loaded in parallel
-    }),
-  ]);
+  const sort = parseSort(new URL(request.url).searchParams.get(SORT_PARAM));
+  const paginationVariables = getPaginationVariables(request, {pageBy: 12});
+
+  const {collection} = await storefront.query(COLLECTION_QUERY, {
+    variables: {handle, ...toCollectionSort(sort), ...paginationVariables},
+  });
 
   if (!collection) {
-    throw new Response(`Collection ${handle} not found`, {
-      status: 404,
-    });
+    throw new Response(`Collection ${handle} not found`, {status: 404});
   }
 
-  // The API handle might be localized, so redirect to the localized handle
+  // El handle puede venir traducido por Shopify: se redirige al canónico.
   redirectIfHandleIsLocalized(request, {handle, data: collection});
 
-  return {
-    collection,
-  };
-}
-
-/**
- * Load data for rendering content below the fold. This data is deferred and will be
- * fetched after the initial page load. If it's unavailable, the page should still 200.
- * Make sure to not throw any errors here, as it will cause the page to 500.
- */
-function loadDeferredData({context}: Route.LoaderArgs) {
-  return {};
+  return {collection, sort};
 }
 
 export default function Collection() {
-  const {collection} = useLoaderData<typeof loader>();
+  const {collection, sort} = useLoaderData<typeof loader>();
 
   return (
-    <div className="collection">
-      <h1>{collection.title}</h1>
-      <p className="collection-description">{collection.description}</p>
-      <PaginatedResourceSection<ProductItemFragment>
+    <div className="page">
+      <header className="page__header">
+        <h1 className="page__title">
+          {collectionLabel(collection.handle, collection.title)}
+        </h1>
+        <SortLinks current={sort} />
+      </header>
+
+      <PaginatedResourceSection<ProductCardFragment>
         connection={collection.products}
-        resourcesClassName="products-grid"
+        resourcesClassName="product-grid"
       >
         {({node: product, index}) => (
-          <ProductItem
+          <ProductCard
             key={product.id}
             product={product}
-            loading={index < 8 ? 'eager' : undefined}
+            loading={index < 4 ? 'eager' : 'lazy'}
           />
         )}
       </PaginatedResourceSection>
+
       <Analytics.CollectionView
-        data={{
-          collection: {
-            id: collection.id,
-            handle: collection.handle,
-          },
-        }}
+        data={{collection: {id: collection.id, handle: collection.handle}}}
       />
     </div>
   );
 }
 
-const PRODUCT_ITEM_FRAGMENT = `#graphql
-  fragment MoneyProductItem on MoneyV2 {
-    amount
-    currencyCode
-  }
-  fragment ProductItem on Product {
-    id
-    handle
-    title
-    featuredImage {
-      id
-      altText
-      url
-      width
-      height
-    }
-    priceRange {
-      minVariantPrice {
-        ...MoneyProductItem
-      }
-      maxVariantPrice {
-        ...MoneyProductItem
-      }
-    }
-  }
-` as const;
-
-// NOTE: https://shopify.dev/docs/api/storefront/2022-04/objects/collection
 const COLLECTION_QUERY = `#graphql
-  ${PRODUCT_ITEM_FRAGMENT}
+  ${PRODUCT_CARD_FRAGMENT}
   query Collection(
     $handle: String!
     $country: CountryCode
     $language: LanguageCode
+    $sortKey: ProductCollectionSortKeys
+    $reverse: Boolean
     $first: Int
     $last: Int
     $startCursor: String
@@ -139,15 +99,16 @@ const COLLECTION_QUERY = `#graphql
       id
       handle
       title
-      description
       products(
         first: $first,
         last: $last,
         before: $startCursor,
-        after: $endCursor
+        after: $endCursor,
+        sortKey: $sortKey,
+        reverse: $reverse
       ) {
         nodes {
-          ...ProductItem
+          ...ProductCard
         }
         pageInfo {
           hasPreviousPage
