@@ -1,248 +1,297 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
-import { Await, useLoaderData, useRouteLoaderData, Link } from 'react-router';
-import { Image, Money, CartForm, useOptimisticCart } from '@shopify/hydrogen';
-import gsap from 'gsap';
-import type { CartApiQueryFragment } from 'storefrontapi.generated';
-import type { RootLoader } from '~/root';
+import {Suspense} from 'react';
+import {Await, useLoaderData, useRouteLoaderData} from 'react-router';
+import type {Route} from './+types/products.$handle';
+import {
+  Analytics,
+  getAdjacentAndFirstAvailableVariants,
+  getProductOptions,
+  getSelectedProductOptions,
+  useOptimisticVariant,
+  useSelectedOptionInUrlParam,
+} from '@shopify/hydrogen';
+import {ProductCard} from '~/components/ProductCard';
+import {ProductPrice} from '~/components/ProductPrice';
+import {ProductForm} from '~/components/product/ProductForm';
+import {ProductGallery} from '~/components/product/ProductGallery';
+import {SITE} from '~/config/site';
+import {PRODUCT_CARD_FRAGMENT} from '~/lib/fragments';
+import {redirectIfHandleIsLocalized} from '~/lib/redirect';
+import {buildWhatsAppUrl} from '~/lib/whatsapp';
+import type {RootLoader} from '~/root';
 
-type LoaderArgs = {
-  context: any;
-  params: { handle: string };
+export const meta: Route.MetaFunction = ({data}) => {
+  if (!data) return [{title: SITE.name}];
+  const {product} = data;
+  return [
+    {title: product.title + ' — ' + SITE.name},
+    {name: 'description', content: product.description.slice(0, 155)},
+    {property: 'og:title', content: product.title},
+    {property: 'og:image', content: product.images.nodes[0]?.url},
+    {rel: 'canonical', href: '/products/' + product.handle},
+  ];
 };
 
-export async function loader({ context, params }: LoaderArgs) {
-  const { handle } = params;
-  const { product } = await context.storefront.query(PRODUCT_QUERY, {
-    variables: { handle },
+/**
+ * Dos tipos de datos con dos prioridades:
+ * - El producto es crítico: sin él no hay página, así que se espera (await).
+ * - Las recomendaciones van debajo del pliegue: viajan como promesa y llegan
+ *   después por streaming, sin retrasar el primer pintado.
+ */
+export async function loader({context, params, request}: Route.LoaderArgs) {
+  const {handle} = params;
+  const {storefront} = context;
+
+  if (!handle) {
+    throw new Response('Falta el producto', {status: 400});
+  }
+
+  const {product} = await storefront.query(PRODUCT_QUERY, {
+    variables: {handle, selectedOptions: getSelectedProductOptions(request)},
   });
 
-  if (!product) {
-    throw new Response(null, { status: 404 });
+  if (!product?.id) {
+    throw new Response(null, {status: 404});
   }
 
-  return { product };
+  redirectIfHandleIsLocalized(request, {handle, data: product});
+
+  const recommended = storefront
+    .query(RECOMMENDED_QUERY, {
+      variables: {productId: product.id},
+      cache: storefront.CacheLong(),
+    })
+    // Si falla, la página igual se muestra: solo falta esa sección.
+    .catch((error: Error) => {
+      console.error(error);
+      return null;
+    });
+
+  return {product, recommended};
 }
 
-export default function ProductDetail() {
-  const { product } = useLoaderData<typeof loader>();
-  const firstVariant = product.variants.nodes[0];
-  const cartPromise = useRouteLoaderData<RootLoader>('root')?.cart;
-  
-  // Estados para el Carrito Lateral
-  const [isCartOpen, setIsCartOpen] = useState(false);
+export default function Product() {
+  const {product, recommended} = useLoaderData<typeof loader>();
+  const whatsappNumber = useRouteLoaderData<RootLoader>('root')?.whatsappNumber;
 
-  // Refs de GSAP
-  const imageRef = useRef<HTMLDivElement>(null);
-  const infoRef = useRef<HTMLDivElement>(null);
-  const drawerRef = useRef<HTMLDivElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
-
-  // 1. Animación de entrada inicial
-  useEffect(() => {
-    const tl = gsap.timeline();
-    tl.fromTo(imageRef.current, { opacity: 0, x: -50, filter: 'blur(10px)' }, { opacity: 1, x: 0, filter: 'blur(0px)', duration: 1.2, ease: 'power3.out' })
-      .fromTo(infoRef.current, { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 1, ease: 'power3.out' }, "-=0.6");
-  }, []);
-
-  // 2. Animación del Cart Drawer al abrir/cerrar
-  useEffect(() => {
-    if (isCartOpen) {
-      gsap.to(overlayRef.current, { opacity: 1, display: 'block', duration: 0.3, ease: 'power2.out' });
-      gsap.to(drawerRef.current, { x: '0%', duration: 0.5, ease: 'power4.out' });
-    } else {
-      gsap.to(drawerRef.current, { x: '100%', duration: 0.4, ease: 'power3.in' });
-      gsap.to(overlayRef.current, { opacity: 0, duration: 0.3, ease: 'power2.in', onComplete: () => {
-        if (overlayRef.current) overlayRef.current.style.display = 'none';
-      }});
-    }
-  }, [isCartOpen]);
-
-  return (
-    <div style={{ backgroundColor: '#121212', color: '#E0E2DB', minHeight: '100vh', fontFamily: '"Inter", sans-serif', overflowX: 'hidden' }}>
-      
-      {/* NAVBAR */}
-      <nav style={{ padding: '2rem 5vw', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #2E3532' }}>
-        <Link to="/" style={{ color: '#E0E2DB', textDecoration: 'none', fontSize: '1.2rem', fontWeight: 600, letterSpacing: '0.1em' }}>
-          ← VOLVER
-        </Link>
-        <span style={{ fontFamily: '"Playfair Display", serif', fontSize: '1.5rem', color: '#8B2635' }}>PORTO</span>
-        <button onClick={() => setIsCartOpen(true)} style={{ background: 'none', border: 'none', color: '#E0E2DB', fontSize: '1.2rem', cursor: 'pointer', fontWeight: 600 }}>
-          CARRITO (<Suspense fallback="0"><Await resolve={cartPromise}>{(cart) => <CartCount cart={cart} />}</Await></Suspense>)
-        </button>
-      </nav>
-
-      {/* CONTENIDO DEL PRODUCTO */}
-      <div style={{ display: 'flex', flexDirection: 'row', minHeight: 'calc(100vh - 90px)', padding: '0 5vw', alignItems: 'center', flexWrap: 'wrap' }}>
-        
-        {/* Columna Izquierda: Imagen */}
-        <div ref={imageRef} style={{ flex: '1 1 50%', display: 'flex', justifyContent: 'center', padding: '2rem' }}>
-          <div style={{ width: '100%', maxWidth: '600px', height: '70vh', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 30px 60px rgba(0,0,0,0.5)' }}>
-            <Image data={product.featuredImage} sizes="(min-width: 45em) 50vw, 100vw" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-          </div>
-        </div>
-
-        {/* Columna Derecha: Info y Botón de Hydrogen */}
-        <div ref={infoRef} style={{ flex: '1 1 50%', padding: '4rem 2rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-          <span style={{ color: '#8B2635', textTransform: 'uppercase', letterSpacing: '0.2em', fontWeight: 600, marginBottom: '1rem' }}>Edición Limitada</span>
-          <h1 style={{ fontSize: '4.5rem', fontFamily: '"Playfair Display", serif', margin: '0 0 1.5rem 0', lineHeight: 1.1 }}>{product.title}</h1>
-          <div style={{ fontSize: '2rem', fontWeight: 300, marginBottom: '2rem', color: '#D2D4C8' }}>
-            <Money data={product.priceRange.minVariantPrice} />
-          </div>
-          <div style={{ fontSize: '1.2rem', lineHeight: 1.6, color: '#A0A0A0', marginBottom: '3rem', maxWidth: '500px' }} dangerouslySetInnerHTML={{ __html: product.descriptionHtml }} />
-
-          {/* FORMULARIO NATIVO DE HYDROGEN PARA AÑADIR AL CARRITO */}
-          <CartForm
-            route="/cart"
-            action={CartForm.ACTIONS.LinesAdd}
-            inputs={{ lines: [{ merchandiseId: firstVariant.id, quantity: 1 }] }}
-          >
-            {(fetcher) => (
-              <button 
-                type="submit"
-                onClick={() => {
-                  // Abrimos el drawer al darle clic
-                  setIsCartOpen(true);
-                }}
-                style={{
-                  backgroundColor: '#E0E2DB', color: '#121212', border: 'none', padding: '1.5rem 0', width: '100%', maxWidth: '400px', fontSize: '1.1rem', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '50px', cursor: 'pointer', transition: 'transform 0.2s ease, background-color 0.2s ease'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-              >
-                {fetcher.state !== 'idle' ? 'Añadiendo...' : 'Agregar al Carrito'}
-              </button>
-            )}
-          </CartForm>
-        </div>
-      </div>
-
-      {/* ========================================= */}
-      {/* CART DRAWER (PANEL LATERAL DEL CARRITO) */}
-      {/* ========================================= */}
-      
-      {/* 1. Fondo Oscuro (Overlay) */}
-      <div 
-        ref={overlayRef} 
-        onClick={() => setIsCartOpen(false)} 
-        style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(5px)', zIndex: 40, opacity: 0, display: 'none' }} 
-      />
-
-      {/* 2. Panel Deslizable */}
-      <div 
-        ref={drawerRef} 
-        style={{ position: 'fixed', top: 0, right: 0, width: '100%', maxWidth: '450px', height: '100vh', backgroundColor: '#1C211F', zIndex: 50, transform: 'translateX(100%)', display: 'flex', flexDirection: 'column', boxShadow: '-20px 0 60px rgba(0,0,0,0.5)' }}
-      >
-        {/* Cabecera del Carrito */}
-        <div style={{ padding: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #2E3532' }}>
-          <h2 style={{ margin: 0, fontFamily: '"Playfair Display", serif', fontSize: '2rem', color: '#E0E2DB' }}>Tu Carrito</h2>
-          <button onClick={() => setIsCartOpen(false)} style={{ background: 'none', border: 'none', color: '#8B2635', fontSize: '2rem', cursor: 'pointer', lineHeight: 1 }}>
-            &times;
-          </button>
-        </div>
-
-        {/* Productos del carrito real */}
-        <div style={{ padding: '2rem', flex: 1, overflowY: 'auto' }}>
-          <Suspense fallback={null}>
-            <Await resolve={cartPromise}>{(cart) => <CartLines cart={cart} />}</Await>
-          </Suspense>
-        </div>
-
-        {/* Footer del Carrito / Checkout */}
-        <div style={{ padding: '2rem', borderTop: '1px solid #2E3532', backgroundColor: '#121212' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1.5rem', fontSize: '1.2rem', fontWeight: 'bold' }}>
-            <span>Subtotal</span>
-            <span>
-              <Suspense fallback={null}>
-                <Await resolve={cartPromise}>{(cart) => <CartSubtotal cart={cart} />}</Await>
-              </Suspense>
-            </span>
-          </div>
-          <button style={{ backgroundColor: '#8B2635', color: '#E0E2DB', border: 'none', padding: '1.2rem', width: '100%', fontSize: '1.1rem', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', borderRadius: '8px', cursor: 'pointer' }}>
-            Finalizar Compra
-          </button>
-        </div>
-      </div>
-
-    </div>
+  // Al hacer clic en una talla, la UI cambia de variante al instante, antes
+  // de que termine la navegación (variante "optimista").
+  const selectedVariant = useOptimisticVariant(
+    product.selectedOrFirstAvailableVariant,
+    getAdjacentAndFirstAvailableVariants(product),
   );
-}
 
-function CartCount({ cart: originalCart }: { cart?: CartApiQueryFragment | null }) {
-  const cart = useOptimisticCart(originalCart);
-  return <>{cart?.totalQuantity ?? 0}</>;
-}
+  // Si la URL llegó sin opciones, se completan con la variante elegida.
+  useSelectedOptionInUrlParam(selectedVariant.selectedOptions);
 
-function CartSubtotal({ cart: originalCart }: { cart?: CartApiQueryFragment | null }) {
-  const cart = useOptimisticCart(originalCart);
-  return cart?.cost?.subtotalAmount ? <Money data={cart.cost.subtotalAmount} /> : <>—</>;
-}
+  const productOptions = getProductOptions({
+    ...product,
+    selectedOrFirstAvailableVariant: selectedVariant,
+  });
 
-function CartLines({ cart: originalCart }: { cart?: CartApiQueryFragment | null }) {
-  const cart = useOptimisticCart(originalCart);
-  const lines = cart?.lines?.nodes ?? [];
+  // La foto de la variante (p. ej. el color elegido) va primero.
+  const variantImage = selectedVariant.image;
+  const images = variantImage
+    ? [
+        variantImage,
+        ...product.images.nodes.filter((image) => image.url !== variantImage.url),
+      ]
+    : product.images.nodes;
 
-  if (lines.length === 0) {
-    return <p style={{ margin: 0, color: '#A0A0A0', fontSize: '1rem' }}>Tu carrito está vacío.</p>;
-  }
+  const whatsappUrl = whatsappNumber
+    ? buildWhatsAppUrl(
+        whatsappNumber,
+        'Hola PORTO, tengo una pregunta sobre ' +
+          product.title +
+          ' (' +
+          selectedVariant.title +
+          ').',
+      )
+    : null;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {lines.map((line) => (
-        <div key={line.id} style={{ display: 'flex', gap: '1.5rem', alignItems: 'center' }}>
-          <div style={{ width: '100px', height: '120px', backgroundColor: '#121212', borderRadius: '12px', overflow: 'hidden', flexShrink: 0 }}>
-            {line.merchandise.image && <Image data={line.merchandise.image} sizes="100px" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
-          </div>
-          <div>
-            <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.2rem', color: '#E0E2DB' }}>{line.merchandise.product.title}</h3>
-            <p style={{ margin: 0, color: '#A0A0A0', fontSize: '1rem' }}>Cantidad: {line.quantity}</p>
-            <div style={{ marginTop: '1rem', fontWeight: 'bold', color: '#8B2635' }}>
-              <Money data={line.cost.totalAmount} />
+    <>
+      <div className="pdp">
+        <ProductGallery images={images} title={product.title} />
+
+        <div className="pdp__buy">
+          <h1 className="pdp__title">{product.title}</h1>
+          <ProductPrice
+            price={selectedVariant.price}
+            compareAtPrice={selectedVariant.compareAtPrice}
+          />
+          <ProductForm
+            productOptions={productOptions}
+            selectedVariant={selectedVariant}
+          />
+          {whatsappUrl && (
+            <a
+              className="text-link pdp__ask"
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Preguntar por esta prenda en WhatsApp
+            </a>
+          )}
+          {product.descriptionHtml && (
+            <div className="pdp__description">
+              <h2 className="pdp__subtitle">Descripción</h2>
+              {/* HTML que viene del admin de Shopify, no de usuarios. */}
+              <div dangerouslySetInnerHTML={{__html: product.descriptionHtml}} />
             </div>
-            <CartForm route="/cart" action={CartForm.ACTIONS.LinesRemove} inputs={{ lineIds: [line.id] }}>
-              <button type="submit" disabled={!!line.isOptimistic} style={{ marginTop: '0.75rem', background: 'none', border: 'none', padding: 0, color: '#A0A0A0', fontSize: '0.9rem', textDecoration: 'underline', cursor: 'pointer' }}>
-                Eliminar
-              </button>
-            </CartForm>
-          </div>
+          )}
+          <ul className="pdp__perks">
+            <li>Pago seguro en el checkout de Shopify.</li>
+            <li>Cambios de talla durante 30 días.</li>
+          </ul>
         </div>
-      ))}
-    </div>
+      </div>
+
+      <Suspense fallback={null}>
+        <Await resolve={recommended}>
+          {(data) =>
+            data && data.productRecommendations?.length ? (
+              <section className="related" aria-labelledby="related-title">
+                <h2 id="related-title" className="section-title">
+                  También te puede gustar
+                </h2>
+                <div className="product-grid">
+                  {data.productRecommendations.slice(0, 4).map((item) => (
+                    <ProductCard key={item.id} product={item} loading="lazy" />
+                  ))}
+                </div>
+              </section>
+            ) : null
+          }
+        </Await>
+      </Suspense>
+
+      <Analytics.ProductView
+        data={{
+          products: [
+            {
+              id: product.id,
+              title: product.title,
+              price: selectedVariant.price.amount,
+              vendor: product.vendor,
+              variantId: selectedVariant.id,
+              variantTitle: selectedVariant.title,
+              quantity: 1,
+            },
+          ],
+        }}
+      />
+    </>
   );
 }
 
-const PRODUCT_QUERY = `#graphql
-  query Product(
-    $handle: String!
-  ) {
-    product(handle: $handle) {
+const PRODUCT_VARIANT_FRAGMENT = `#graphql
+  fragment ProductVariant on ProductVariant {
+    availableForSale
+    compareAtPrice {
+      amount
+      currencyCode
+    }
+    id
+    image {
+      __typename
       id
+      url
+      altText
+      width
+      height
+    }
+    price {
+      amount
+      currencyCode
+    }
+    product {
       title
       handle
-      descriptionHtml
-      priceRange {
-        minVariantPrice {
-          amount
-          currencyCode
-        }
-      }
-      featuredImage {
+    }
+    selectedOptions {
+      name
+      value
+    }
+    sku
+    title
+  }
+` as const;
+
+const PRODUCT_FRAGMENT = `#graphql
+  fragment Product on Product {
+    id
+    title
+    vendor
+    handle
+    descriptionHtml
+    description
+    encodedVariantExistence
+    encodedVariantAvailability
+    images(first: 8) {
+      nodes {
+        __typename
         id
         url
         altText
         width
         height
       }
-      variants(first: 1) {
-        nodes {
-          id
-          title
-          availableForSale
-          price {
-            amount
-            currencyCode
+    }
+    options {
+      name
+      optionValues {
+        name
+        firstSelectableVariant {
+          ...ProductVariant
+        }
+        swatch {
+          color
+          image {
+            previewImage {
+              url
+            }
           }
         }
       }
     }
+    selectedOrFirstAvailableVariant(
+      selectedOptions: $selectedOptions
+      ignoreUnknownOptions: true
+      caseInsensitiveMatch: true
+    ) {
+      ...ProductVariant
+    }
+    adjacentVariants(selectedOptions: $selectedOptions) {
+      ...ProductVariant
+    }
   }
+  ${PRODUCT_VARIANT_FRAGMENT}
+` as const;
+
+const PRODUCT_QUERY = `#graphql
+  query Product(
+    $country: CountryCode
+    $handle: String!
+    $language: LanguageCode
+    $selectedOptions: [SelectedOptionInput!]!
+  ) @inContext(country: $country, language: $language) {
+    product(handle: $handle) {
+      ...Product
+    }
+  }
+  ${PRODUCT_FRAGMENT}
+` as const;
+
+const RECOMMENDED_QUERY = `#graphql
+  query Recommended(
+    $country: CountryCode
+    $language: LanguageCode
+    $productId: ID!
+  ) @inContext(country: $country, language: $language) {
+    productRecommendations(productId: $productId) {
+      ...ProductCard
+    }
+  }
+  ${PRODUCT_CARD_FRAGMENT}
 ` as const;
